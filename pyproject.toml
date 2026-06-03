@@ -13,11 +13,7 @@ authors = [{name = "briqt"}]
 dependencies = []
 
 [project.scripts]
-siyuan-note-cli = "siyuan_note_cli.cli:main"
+siyuan-note-cli = "src.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["siyuan_note_cli*"]
-
-[tool.setuptools.package-dir]
-"" = "src"
+[tool.setuptools]
+packages = ["src"]
