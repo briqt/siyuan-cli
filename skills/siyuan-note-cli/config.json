@@ -1,0 +1,13 @@
+{
+  "active": "default",
+  "profiles": {
+    "default": {
+      "base_url": "http://127.0.0.1:6806",
+      "token": "",
+      "timeout_seconds": 30,
+      "default_notebook": "",
+      "default_doc_path": "/Inbox"
+    }
+  }
+}
+

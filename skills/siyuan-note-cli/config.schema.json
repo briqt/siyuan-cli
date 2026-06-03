@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["active", "profiles"],
+  "properties": {
+    "active": {
+      "type": "string",
+      "description": "Default profile name used when --profile is omitted."
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["base_url", "token"],
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "default": "http://127.0.0.1:6806",
+            "description": "SiYuan HTTP API base URL."
+          },
+          "token": {
+            "type": "string",
+            "description": "SiYuan API token from Settings > About. Keep empty in committed templates."
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 30
+          },
+          "default_notebook": {
+            "type": "string",
+            "description": "Notebook ID used by create-doc when --notebook is omitted."
+          },
+          "default_doc_path": {
+            "type": "string",
+            "default": "/Inbox"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}
+
