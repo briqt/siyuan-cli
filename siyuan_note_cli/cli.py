@@ -48,8 +48,8 @@ def searched_config_paths(explicit: str | None = None) -> list[Path]:
         paths.append(Path(explicit).expanduser())
     paths.extend(
         [
-            Path.cwd() / "skills" / SKILL_NAME / ".config.json",
             Path.cwd() / ".config.json",
+            Path.cwd() / "skill" / ".config.json",
             user_config_path(),
         ]
     )

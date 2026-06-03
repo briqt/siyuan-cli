@@ -9,5 +9,4 @@ dist/
 build/
 *.egg-info/
 .config.json
-skills/siyuan-note-cli/.config.json
-
+skill/.config.json

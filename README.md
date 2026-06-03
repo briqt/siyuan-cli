@@ -18,5 +18,4 @@ siyuan-note-cli search "keyword"
 siyuan-note-cli create-doc --notebook <notebook-id> --path /Inbox/hello --markdown "# Hello"
 ```
 
-Install the agent skill from `skills/siyuan-note-cli/` with your preferred skills installer.
-
+Install the agent skill from `skill/` with your preferred skills installer.
