@@ -1,4 +1,0 @@
-interface:
-  display_name: "SiYuan Note CLI"
-  short_description: "Operate SiYuan notes through the local HTTP API."
-  default_prompt: "Use SiYuan Note CLI to search, read, create, and update notes."

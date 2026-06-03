@@ -16,5 +16,8 @@ dependencies = []
 siyuan-note-cli = "siyuan_note_cli.cli:main"
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["siyuan_note_cli*"]
 
+[tool.setuptools.package-dir]
+"" = "src"

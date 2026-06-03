@@ -16,6 +16,13 @@ except ImportError:  # Allows `python siyuan_note_cli/cli.py --help` during loca
 
 SKILL_NAME = "siyuan-note-cli"
 DEFAULT_BASE_URL = "http://127.0.0.1:6806"
+OFFICIAL_API_DOC_URL = "https://github.com/siyuan-note/siyuan/blob/master/API.md"
+OFFICIAL_API_RAW_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API.md"
+OFFICIAL_API_DOC_ZH_URL = "https://github.com/siyuan-note/siyuan/blob/master/API_zh_CN.md"
+OFFICIAL_API_RAW_ZH_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API_zh_CN.md"
+OFFICIAL_API_DOC_JA_URL = "https://github.com/siyuan-note/siyuan/blob/master/API_ja_JP.md"
+OFFICIAL_API_RAW_JA_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API_ja_JP.md"
+OFFICIAL_ROUTER_URL = "https://github.com/siyuan-note/siyuan/blob/master/kernel/api/router.go"
 CONFIG_TEMPLATE = {
     "active": "default",
     "profiles": {
@@ -176,6 +183,65 @@ def parse_json_arg(raw: str | None, file_path: str | None) -> dict[str, Any]:
     return data
 
 
+def fetch_text_url(url: str, timeout: int = 30) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": f"{SKILL_NAME}/{__version__}"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        fail({"error": "http error", "status": exc.code, "url": url})
+    except urllib.error.URLError as exc:
+        fail({"error": "network error", "url": url, "detail": str(exc)})
+
+
+def api_docs_payload(args: argparse.Namespace) -> dict[str, Any]:
+    docs_by_lang = {
+        "en": (OFFICIAL_API_DOC_URL, OFFICIAL_API_RAW_URL),
+        "zh": (OFFICIAL_API_DOC_ZH_URL, OFFICIAL_API_RAW_ZH_URL),
+        "ja": (OFFICIAL_API_DOC_JA_URL, OFFICIAL_API_RAW_JA_URL),
+    }
+    doc_url, raw_url = docs_by_lang[args.lang]
+    payload: dict[str, Any] = {
+        "lang": args.lang,
+        "official_api_doc": doc_url,
+        "official_api_raw": raw_url,
+        "official_api_docs": {
+            "en": OFFICIAL_API_DOC_URL,
+            "zh": OFFICIAL_API_DOC_ZH_URL,
+            "ja": OFFICIAL_API_DOC_JA_URL,
+        },
+        "official_router": OFFICIAL_ROUTER_URL,
+        "note": "Use `api <endpoint> --data ...` for official endpoints that do not have dedicated CLI commands yet.",
+    }
+    if not args.fetch and not args.query:
+        return payload
+
+    text = fetch_text_url(raw_url, timeout=args.timeout)
+    payload["fetched"] = True
+    if not args.query:
+        payload["content"] = text
+        return payload
+
+    query = args.query.lower()
+    lines = text.splitlines()
+    matches = []
+    for index, line in enumerate(lines):
+        if query not in line.lower():
+            continue
+        start = max(0, index - args.context)
+        end = min(len(lines), index + args.context + 1)
+        matches.append(
+            {
+                "line": index + 1,
+                "text": line,
+                "context": [{"line": line_no + 1, "text": lines[line_no]} for line_no in range(start, end)],
+            }
+        )
+    payload["query"] = args.query
+    payload["matches"] = matches
+    return payload
+
+
 def api_post(profile: dict[str, Any], endpoint: str, payload: dict[str, Any] | None = None) -> Any:
     base_url = (profile.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
     endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
@@ -212,6 +278,19 @@ def api_post(profile: dict[str, Any], endpoint: str, payload: dict[str, Any] | N
     return data
 
 
+def default_notebook(profile: dict[str, Any], explicit: str | None = None) -> str:
+    notebook = explicit or profile.get("default_notebook")
+    if not notebook:
+        fail({"error": "missing notebook", "hint": "Pass --notebook or set default_notebook in config.json."})
+    return notebook
+
+
+def required_value(value: str | None, name: str) -> str:
+    if not value:
+        fail({"error": f"missing {name}"})
+    return value
+
+
 def command_payload(args: argparse.Namespace, profile: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     command = args.command
     if command == "api":
@@ -222,6 +301,14 @@ def command_payload(args: argparse.Namespace, profile: dict[str, Any]) -> tuple[
         return "/api/system/currentTime", {}
     if command == "notebooks":
         return "/api/notebook/lsNotebooks", {}
+    if command == "create-notebook":
+        return "/api/notebook/createNotebook", {"name": args.name}
+    if command == "rename-notebook":
+        return "/api/notebook/renameNotebook", {"notebook": args.notebook, "name": args.name}
+    if command == "open-notebook":
+        return "/api/notebook/openNotebook", {"notebook": args.notebook}
+    if command == "close-notebook":
+        return "/api/notebook/closeNotebook", {"notebook": args.notebook}
     if command == "search":
         payload = {
             "query": args.query,
@@ -241,12 +328,39 @@ def command_payload(args: argparse.Namespace, profile: dict[str, Any]) -> tuple[
         return "/api/block/getBlockKramdown", {"id": args.id}
     if command == "children":
         return "/api/block/getChildBlocks", {"id": args.id}
+    if command == "list-docs":
+        return "/api/filetree/listDocsByPath", {"notebook": default_notebook(profile, args.notebook), "path": args.path}
     if command == "create-doc":
         markdown = read_text_arg(args.markdown, args.markdown_file, "markdown")
-        notebook = args.notebook or profile.get("default_notebook")
-        if not notebook:
-            fail({"error": "missing notebook", "hint": "Pass --notebook or set default_notebook in config.json."})
-        return "/api/filetree/createDocWithMd", {"notebook": notebook, "path": args.path, "markdown": markdown}
+        return "/api/filetree/createDocWithMd", {"notebook": default_notebook(profile, args.notebook), "path": args.path, "markdown": markdown}
+    if command == "rename-doc":
+        if args.id:
+            return "/api/filetree/renameDocByID", {"id": args.id, "title": args.title}
+        return "/api/filetree/renameDoc", {"notebook": default_notebook(profile, args.notebook), "path": required_value(args.path, "--path"), "title": args.title}
+    if command == "remove-doc":
+        if args.id:
+            return "/api/filetree/removeDocByID", {"id": args.id}
+        return "/api/filetree/removeDoc", {"notebook": default_notebook(profile, args.notebook), "path": required_value(args.path, "--path")}
+    if command == "hpath-by-id":
+        return "/api/filetree/getHPathByID", {"id": args.id}
+    if command == "path-by-id":
+        return "/api/filetree/getPathByID", {"id": args.id}
+    if command == "ids-by-hpath":
+        return "/api/filetree/getIDsByHPath", {"path": args.path, "notebook": default_notebook(profile, args.notebook)}
+    if command == "export-md":
+        return "/api/export/exportMdContent", {"id": args.id}
+    if command == "insert-block":
+        data = read_text_arg(args.markdown, args.markdown_file, "markdown")
+        payload = {
+            "dataType": "markdown",
+            "data": data,
+            "nextID": args.next_id or "",
+            "previousID": args.previous_id or "",
+            "parentID": args.parent_id or "",
+        }
+        if not (payload["nextID"] or payload["previousID"] or payload["parentID"]):
+            fail({"error": "missing insertion anchor", "hint": "Pass --next-id, --previous-id, or --parent-id."})
+        return "/api/block/insertBlock", payload
     if command == "append-block":
         data = read_text_arg(args.markdown, args.markdown_file, "markdown")
         return "/api/block/appendBlock", {"parentID": args.parent_id, "dataType": "markdown", "data": data}
@@ -258,6 +372,10 @@ def command_payload(args: argparse.Namespace, profile: dict[str, Any]) -> tuple[
         return "/api/block/updateBlock", {"id": args.id, "dataType": "markdown", "data": data}
     if command == "delete-block":
         return "/api/block/deleteBlock", {"id": args.id}
+    if command == "fold-block":
+        return "/api/block/foldBlock", {"id": args.id}
+    if command == "unfold-block":
+        return "/api/block/unfoldBlock", {"id": args.id}
     if command == "attrs":
         return "/api/attr/getBlockAttrs", {"id": args.id}
     if command == "set-attrs":
@@ -278,6 +396,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("current-time", help="Get SiYuan system time.")
     sub.add_parser("notebooks", help="List notebooks.")
 
+    docs = sub.add_parser("api-docs", help="Show or fetch official SiYuan API documentation links.")
+    docs.add_argument("--lang", choices=["zh", "en", "ja"], default="zh", help="Official API.md language.")
+    docs.add_argument("--fetch", action="store_true", help="Fetch the latest official API.md from GitHub.")
+    docs.add_argument("--query", help="Fetch API.md and return matching lines with context.")
+    docs.add_argument("--context", type=int, default=4, help="Context lines around --query matches.")
+    docs.add_argument("--timeout", type=int, default=30)
+
     api = sub.add_parser("api", help="Call any SiYuan API endpoint.")
     api.add_argument("endpoint", help="Endpoint such as /api/notebook/lsNotebooks.")
     api.add_argument("--data", help="JSON object payload.")
@@ -294,17 +419,63 @@ def build_parser() -> argparse.ArgumentParser:
     sql = sub.add_parser("sql", help="Execute a SiYuan SQL query.")
     sql.add_argument("statement")
 
+    create_notebook = sub.add_parser("create-notebook", help="Create a notebook.")
+    create_notebook.add_argument("name")
+
+    rename_notebook = sub.add_parser("rename-notebook", help="Rename a notebook.")
+    rename_notebook.add_argument("notebook")
+    rename_notebook.add_argument("name")
+
+    for name in ("open-notebook", "close-notebook"):
+        notebook = sub.add_parser(name, help=f"{name.replace('-', ' ').title()}.")
+        notebook.add_argument("notebook")
+
     get_block = sub.add_parser("get-block", help="Read a block as Kramdown.")
     get_block.add_argument("id")
 
     children = sub.add_parser("children", help="List child blocks.")
     children.add_argument("id")
 
+    list_docs = sub.add_parser("list-docs", help="List documents under a notebook path.")
+    list_docs.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
+    list_docs.add_argument("--path", default="/")
+
     create_doc = sub.add_parser("create-doc", help="Create a document with Markdown.")
     create_doc.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
     create_doc.add_argument("--path", required=True, help="Document path, for example /Inbox/New note.")
     create_doc.add_argument("--markdown")
     create_doc.add_argument("--markdown-file")
+
+    rename_doc = sub.add_parser("rename-doc", help="Rename a document by ID or notebook/path.")
+    rename_doc.add_argument("--id")
+    rename_doc.add_argument("--notebook", help="Required with --path unless default_notebook is configured.")
+    rename_doc.add_argument("--path")
+    rename_doc.add_argument("--title", required=True)
+
+    remove_doc = sub.add_parser("remove-doc", help="Remove a document by ID or notebook/path.")
+    remove_doc.add_argument("--id")
+    remove_doc.add_argument("--notebook", help="Required with --path unless default_notebook is configured.")
+    remove_doc.add_argument("--path")
+
+    hpath = sub.add_parser("hpath-by-id", help="Get human-readable document path by block/doc ID.")
+    hpath.add_argument("id")
+
+    path = sub.add_parser("path-by-id", help="Get storage path by block/doc ID.")
+    path.add_argument("id")
+
+    ids_by_hpath = sub.add_parser("ids-by-hpath", help="Get document IDs by human-readable path.")
+    ids_by_hpath.add_argument("path")
+    ids_by_hpath.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
+
+    export_md = sub.add_parser("export-md", help="Export a document as Markdown content.")
+    export_md.add_argument("id")
+
+    insert = sub.add_parser("insert-block", help="Insert Markdown before, after, or inside an anchor block.")
+    insert.add_argument("--next-id")
+    insert.add_argument("--previous-id")
+    insert.add_argument("--parent-id")
+    insert.add_argument("--markdown")
+    insert.add_argument("--markdown-file")
 
     for name in ("append-block", "prepend-block"):
         block = sub.add_parser(name, help=f"{name.replace('-', ' ').title()} with Markdown.")
@@ -319,6 +490,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     delete = sub.add_parser("delete-block", help="Delete a block.")
     delete.add_argument("id")
+
+    fold = sub.add_parser("fold-block", help="Fold a block.")
+    fold.add_argument("id")
+
+    unfold = sub.add_parser("unfold-block", help="Unfold a block.")
+    unfold.add_argument("id")
 
     attrs = sub.add_parser("attrs", help="Get block attributes.")
     attrs.add_argument("id")
@@ -338,6 +515,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init-config":
         eprint("[profile: default]")
         json_out(init_config(args.overwrite))
+        return 0
+    if args.command == "api-docs":
+        eprint("[profile: none]")
+        json_out(api_docs_payload(args))
         return 0
 
     _config_path, profile_name, profile = load_config(args)
