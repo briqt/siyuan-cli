@@ -1,57 +1,67 @@
 ---
-name: siyuan-note-cli
+name: siyuan-cli
 description: Operate SiYuan Note / 思源笔记 through a local CLI backed by the official HTTP API. Use when the user asks to search, read, create, append, update, delete, organize, export, or inspect SiYuan notebooks, documents, blocks, attributes, or SQL query results; when they mention 思源笔记, SiYuan, block IDs, notebook IDs, or the local SiYuan API; or when an agent needs durable note capture into SiYuan.
 ---
 
-# SiYuan Note CLI
+# SiYuan CLI
 
-Use `siyuan-note-cli` instead of ad hoc curl calls. It handles config discovery, profile selection, token auth, JSON output, and common API error reporting.
-
-Official source of truth:
-
-- API docs: `https://github.com/siyuan-note/siyuan/blob/master/API.md`
-- 中文 API docs: `https://github.com/siyuan-note/siyuan/blob/master/API_zh_CN.md`
-- All API routes: `https://github.com/siyuan-note/siyuan/blob/master/kernel/api/router.go`
+Use `siyuan-cli` instead of ad hoc curl calls. It handles config discovery, profile selection, token auth, JSON output, common API error reporting, and local maintenance of official SiYuan API references.
 
 ## Setup
 
 Install the CLI if it is unavailable:
 
 ```bash
-pipx install git+https://github.com/briqt/siyuan-note-cli.git
+pipx install git+https://github.com/briqt/siyuan-cli.git
 ```
 
 Initialize config:
 
 ```bash
-siyuan-note-cli init-config
-open ~/.config/agent-skills/siyuan-note-cli/config.json
+siyuan-cli init-config
+open ~/.config/agent-skills/siyuan-cli/config.json
 ```
 
 Set `profiles.default.token` from SiYuan `Settings > About`. Set `base_url` to the current SiYuan API URL if it is not `http://127.0.0.1:6806`.
 
 The CLI prints `[profile: <name>]` to stderr on every run and JSON to stdout. Use `--profile <name>` for alternate SiYuan instances.
 
+## Official Docs
+
+Before using an unfamiliar endpoint, read the vendored official docs under `references/official/`:
+
+```bash
+rg -n "/api/block/appendBlock|插入后置子块" references/official/API_zh_CN.md
+rg -n "/api/block/appendBlock" references/official/API.md
+rg -n "appendBlock" references/official/kernel-api-router.go
+```
+
+If the official docs are missing or stale, update them from the SiYuan official GitHub repo:
+
+```bash
+siyuan-cli update-docs --references-dir <skill-root>/references
+```
+
+When working from this repository root, `siyuan-cli update-docs` is enough.
+
 ## Quick Commands
 
 ```bash
-siyuan-note-cli api-docs --query "/api/block/appendBlock"
-siyuan-note-cli api-docs --lang en --query "Append blocks"
-siyuan-note-cli notebooks
-siyuan-note-cli list-docs --notebook <notebook-id> --path /
-siyuan-note-cli search "关键词" --page-size 10
-siyuan-note-cli sql "SELECT id, content, hpath FROM blocks WHERE content LIKE '%关键词%' LIMIT 20"
-siyuan-note-cli get-block <block-id>
-siyuan-note-cli export-md <doc-id>
-siyuan-note-cli children <block-id>
-siyuan-note-cli create-doc --notebook <notebook-id> --path /Inbox/Title --markdown-file note.md
-siyuan-note-cli insert-block --parent-id <parent-id> --markdown-file note.md
-siyuan-note-cli append-block <parent-id> --markdown "New paragraph"
-siyuan-note-cli update-block <block-id> --markdown-file replacement.md
-siyuan-note-cli delete-block <block-id>
+siyuan-cli notebooks
+siyuan-cli list-docs --notebook <notebook-id> --path /
+siyuan-cli search "关键词" --page-size 10
+siyuan-cli sql "SELECT id, content, hpath FROM blocks WHERE content LIKE '%关键词%' LIMIT 20"
+siyuan-cli get-block <block-id>
+siyuan-cli export-md <doc-id>
+siyuan-cli children <block-id>
+siyuan-cli create-doc --notebook <notebook-id> --path /Inbox/Title --markdown-file note.md
+siyuan-cli insert-block --parent-id <parent-id> --markdown-file note.md
+siyuan-cli append-block <parent-id> --markdown "New paragraph"
+siyuan-cli update-block <block-id> --markdown-file replacement.md
+siyuan-cli delete-block <block-id>
 ```
 
-Use `siyuan-note-cli api <endpoint> --data '{...}'` for official endpoints not yet wrapped by a dedicated command. Before using a new endpoint, run `siyuan-note-cli api-docs --query "<endpoint>"` to read the latest official `API.md`.
+Use `siyuan-cli api <endpoint> --data '{...}'` for official endpoints not yet wrapped by a dedicated command. Check the local official docs first so the request payload matches the current API.
 
 ## Workflow
 
@@ -64,4 +74,4 @@ Use `siyuan-note-cli api <endpoint> --data '{...}'` for official endpoints not y
 
 ## References
 
-Read `references/api-workflows.md` when a task needs endpoint details, raw API fallback examples, or safe write sequencing.
+Read `references/api-workflows.md` for safe sequencing and `references/official/` for the current vendored official API docs.

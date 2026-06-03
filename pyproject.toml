@@ -3,7 +3,7 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "siyuan-note-cli"
+name = "siyuan-cli"
 version = "0.1.0"
 description = "CLI for operating SiYuan notes through the local HTTP API."
 readme = "README.md"
@@ -13,7 +13,7 @@ authors = [{name = "briqt"}]
 dependencies = []
 
 [project.scripts]
-siyuan-note-cli = "src.cli:main"
+siyuan-cli = "src.cli:main"
 
 [tool.setuptools]
 packages = ["src"]

@@ -1,0 +1,26 @@
+{
+  "official_repository": "https://github.com/siyuan-note/siyuan",
+  "files": [
+    {
+      "name": "api-zh",
+      "path": "skill/references/official/API_zh_CN.md",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/API_zh_CN.md",
+      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API_zh_CN.md",
+      "bytes": 30246
+    },
+    {
+      "name": "api-en",
+      "path": "skill/references/official/API.md",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/API.md",
+      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API.md",
+      "bytes": 31725
+    },
+    {
+      "name": "api-router",
+      "path": "skill/references/official/kernel-api-router.go",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/kernel/api/router.go",
+      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/kernel/api/router.go",
+      "bytes": 57180
+    }
+  ]
+}

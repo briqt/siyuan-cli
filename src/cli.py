@@ -10,19 +10,38 @@ from typing import Any
 
 try:
     from . import __version__
-except ImportError:  # Allows `python siyuan_note_cli/cli.py --help` during local development.
+except ImportError:  # Allows `python src/cli.py --help` during local development.
     __version__ = "0.1.0"
 
 
-SKILL_NAME = "siyuan-note-cli"
+SKILL_NAME = "siyuan-cli"
 DEFAULT_BASE_URL = "http://127.0.0.1:6806"
 OFFICIAL_API_DOC_URL = "https://github.com/siyuan-note/siyuan/blob/master/API.md"
 OFFICIAL_API_RAW_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API.md"
 OFFICIAL_API_DOC_ZH_URL = "https://github.com/siyuan-note/siyuan/blob/master/API_zh_CN.md"
 OFFICIAL_API_RAW_ZH_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API_zh_CN.md"
-OFFICIAL_API_DOC_JA_URL = "https://github.com/siyuan-note/siyuan/blob/master/API_ja_JP.md"
-OFFICIAL_API_RAW_JA_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API_ja_JP.md"
 OFFICIAL_ROUTER_URL = "https://github.com/siyuan-note/siyuan/blob/master/kernel/api/router.go"
+OFFICIAL_ROUTER_RAW_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/kernel/api/router.go"
+OFFICIAL_DOCS = [
+    {
+        "name": "api-zh",
+        "filename": "API_zh_CN.md",
+        "source_url": OFFICIAL_API_DOC_ZH_URL,
+        "raw_url": OFFICIAL_API_RAW_ZH_URL,
+    },
+    {
+        "name": "api-en",
+        "filename": "API.md",
+        "source_url": OFFICIAL_API_DOC_URL,
+        "raw_url": OFFICIAL_API_RAW_URL,
+    },
+    {
+        "name": "api-router",
+        "filename": "kernel-api-router.go",
+        "source_url": OFFICIAL_ROUTER_URL,
+        "raw_url": OFFICIAL_ROUTER_RAW_URL,
+    },
+]
 CONFIG_TEMPLATE = {
     "active": "default",
     "profiles": {
@@ -108,7 +127,7 @@ def load_config(args: argparse.Namespace) -> tuple[Path, str, dict[str, Any]]:
                     "path": str(path),
                     "detail": str(exc),
                     "searched": [str(p) for p in searched],
-                    "repair": f"siyuan-note-cli init-config && open {user_config_path()}",
+                    "repair": f"siyuan-cli init-config && open {user_config_path()}",
                 }
             )
         profiles = data.get("profiles")
@@ -118,7 +137,7 @@ def load_config(args: argparse.Namespace) -> tuple[Path, str, dict[str, Any]]:
                     "error": "config missing profiles object",
                     "path": str(path),
                     "searched": [str(p) for p in searched],
-                    "repair": f"siyuan-note-cli init-config && open {user_config_path()}",
+                    "repair": f"siyuan-cli init-config && open {user_config_path()}",
                 }
             )
         profile_name = args.profile or data.get("active") or "default"
@@ -152,7 +171,7 @@ def load_config(args: argparse.Namespace) -> tuple[Path, str, dict[str, Any]]:
         {
             "error": "config not found",
             "searched": [str(p) for p in searched],
-            "repair": f"siyuan-note-cli init-config && open {user_config_path()}",
+            "repair": f"siyuan-cli init-config && open {user_config_path()}",
         }
     )
 
@@ -194,52 +213,56 @@ def fetch_text_url(url: str, timeout: int = 30) -> str:
         fail({"error": "network error", "url": url, "detail": str(exc)})
 
 
-def api_docs_payload(args: argparse.Namespace) -> dict[str, Any]:
-    docs_by_lang = {
-        "en": (OFFICIAL_API_DOC_URL, OFFICIAL_API_RAW_URL),
-        "zh": (OFFICIAL_API_DOC_ZH_URL, OFFICIAL_API_RAW_ZH_URL),
-        "ja": (OFFICIAL_API_DOC_JA_URL, OFFICIAL_API_RAW_JA_URL),
-    }
-    doc_url, raw_url = docs_by_lang[args.lang]
-    payload: dict[str, Any] = {
-        "lang": args.lang,
-        "official_api_doc": doc_url,
-        "official_api_raw": raw_url,
-        "official_api_docs": {
-            "en": OFFICIAL_API_DOC_URL,
-            "zh": OFFICIAL_API_DOC_ZH_URL,
-            "ja": OFFICIAL_API_DOC_JA_URL,
-        },
-        "official_router": OFFICIAL_ROUTER_URL,
-        "note": "Use `api <endpoint> --data ...` for official endpoints that do not have dedicated CLI commands yet.",
-    }
-    if not args.fetch and not args.query:
-        return payload
+def detect_references_dir(explicit: str | None = None) -> Path:
+    if explicit:
+        return Path(explicit).expanduser()
+    candidates = [
+        Path.cwd() / "skill" / "references",
+        Path.cwd() / "references",
+    ]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+    fail(
+        {
+            "error": "references directory not found",
+            "searched": [str(p) for p in candidates],
+            "repair": "Run from the repository root or pass --references-dir /path/to/skill/references.",
+        }
+    )
 
-    text = fetch_text_url(raw_url, timeout=args.timeout)
-    payload["fetched"] = True
-    if not args.query:
-        payload["content"] = text
-        return payload
 
-    query = args.query.lower()
-    lines = text.splitlines()
-    matches = []
-    for index, line in enumerate(lines):
-        if query not in line.lower():
-            continue
-        start = max(0, index - args.context)
-        end = min(len(lines), index + args.context + 1)
-        matches.append(
+def update_docs_payload(args: argparse.Namespace) -> dict[str, Any]:
+    references_dir = detect_references_dir(args.references_dir)
+    official_dir = references_dir / "official"
+    official_dir.mkdir(parents=True, exist_ok=True)
+    files = []
+    for item in OFFICIAL_DOCS:
+        text = fetch_text_url(item["raw_url"], timeout=args.timeout)
+        target = official_dir / item["filename"]
+        target.write_text(text, encoding="utf-8")
+        files.append(
             {
-                "line": index + 1,
-                "text": line,
-                "context": [{"line": line_no + 1, "text": lines[line_no]} for line_no in range(start, end)],
+                "name": item["name"],
+                "path": str(target),
+                "source_url": item["source_url"],
+                "raw_url": item["raw_url"],
+                "bytes": len(text.encode("utf-8")),
             }
         )
-    payload["query"] = args.query
-    payload["matches"] = matches
-    return payload
+    manifest = {
+        "official_repository": "https://github.com/siyuan-note/siyuan",
+        "files": files,
+    }
+    manifest_path = official_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "ok": True,
+        "references_dir": str(references_dir),
+        "official_dir": str(official_dir),
+        "manifest": str(manifest_path),
+        "files": files,
+    }
 
 
 def api_post(profile: dict[str, Any], endpoint: str, payload: dict[str, Any] | None = None) -> Any:
@@ -396,12 +419,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("current-time", help="Get SiYuan system time.")
     sub.add_parser("notebooks", help="List notebooks.")
 
-    docs = sub.add_parser("api-docs", help="Show or fetch official SiYuan API documentation links.")
-    docs.add_argument("--lang", choices=["zh", "en", "ja"], default="zh", help="Official API.md language.")
-    docs.add_argument("--fetch", action="store_true", help="Fetch the latest official API.md from GitHub.")
-    docs.add_argument("--query", help="Fetch API.md and return matching lines with context.")
-    docs.add_argument("--context", type=int, default=4, help="Context lines around --query matches.")
-    docs.add_argument("--timeout", type=int, default=30)
+    update_docs = sub.add_parser("update-docs", help="Overwrite bundled references with the latest official SiYuan docs.")
+    update_docs.add_argument("--references-dir", help="Path to the skill references directory. Defaults to ./skill/references.")
+    update_docs.add_argument("--timeout", type=int, default=30)
 
     api = sub.add_parser("api", help="Call any SiYuan API endpoint.")
     api.add_argument("endpoint", help="Endpoint such as /api/notebook/lsNotebooks.")
@@ -516,9 +536,9 @@ def main(argv: list[str] | None = None) -> int:
         eprint("[profile: default]")
         json_out(init_config(args.overwrite))
         return 0
-    if args.command == "api-docs":
+    if args.command == "update-docs":
         eprint("[profile: none]")
-        json_out(api_docs_payload(args))
+        json_out(update_docs_payload(args))
         return 0
 
     _config_path, profile_name, profile = load_config(args)
