@@ -59,6 +59,8 @@ siyuan-cli insert-block --parent-id <parent-id> --markdown-file note.md
 siyuan-cli append-block <parent-id> --markdown "New paragraph"
 siyuan-cli update-block <block-id> --markdown-file replacement.md
 siyuan-cli delete-block <block-id>
+siyuan-cli upload-asset /path/to/image.png --assets-dir /assets/
+siyuan-cli doc-outline <doc-id>
 ```
 
 Use `siyuan-cli api <endpoint> --data '{...}'` for official endpoints not yet wrapped by a dedicated command. Check the local official docs first so the request payload matches the current API.

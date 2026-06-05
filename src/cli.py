@@ -301,6 +301,52 @@ def api_post(profile: dict[str, Any], endpoint: str, payload: dict[str, Any] | N
     return data
 
 
+def api_upload_asset(profile: dict[str, Any], files: list[str], assets_dir: str = "/assets/") -> Any:
+    import mimetypes
+    import uuid
+
+    base_url = (profile.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
+    url = f"{base_url}/api/asset/upload"
+    timeout = int(profile.get("timeout_seconds") or 30)
+    boundary = uuid.uuid4().hex
+
+    parts: list[bytes] = []
+    parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"assetsDirPath\"\r\n\r\n{assets_dir}\r\n".encode())
+    for filepath in files:
+        p = Path(filepath).expanduser()
+        if not p.exists():
+            fail({"error": "file not found", "path": str(p)})
+        mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"file[]\"; filename=\"{p.name}\"\r\nContent-Type: {mime}\r\n\r\n".encode() + p.read_bytes() + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    body = b"".join(parts)
+
+    req = urllib.request.Request(
+        url, data=body, method="POST",
+        headers={
+            "Authorization": f"Token {profile['token']}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "User-Agent": f"{SKILL_NAME}/{__version__}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            response_body = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+        fail({"error": "http error", "status": exc.code, "endpoint": "/api/asset/upload", "body": response_body})
+    except urllib.error.URLError as exc:
+        fail({"error": "network error", "endpoint": "/api/asset/upload", "detail": str(exc)})
+
+    try:
+        data = json.loads(response_body)
+    except json.JSONDecodeError:
+        return {"raw": response_body}
+    if isinstance(data, dict) and data.get("code", 0) != 0:
+        fail({"error": "SiYuan API error", "endpoint": "/api/asset/upload", "response": data})
+    return data
+
+
 def default_notebook(profile: dict[str, Any], explicit: str | None = None) -> str:
     notebook = explicit or profile.get("default_notebook")
     if not notebook:
@@ -403,6 +449,8 @@ def command_payload(args: argparse.Namespace, profile: dict[str, Any]) -> tuple[
         return "/api/attr/getBlockAttrs", {"id": args.id}
     if command == "set-attrs":
         return "/api/attr/setBlockAttrs", {"id": args.id, "attrs": parse_json_arg(args.attrs, args.attrs_file)}
+    if command == "doc-outline":
+        return "/api/outline/getDocOutline", {"id": args.id}
     fail({"error": "unknown command", "command": command})
 
 
@@ -525,6 +573,13 @@ def build_parser() -> argparse.ArgumentParser:
     set_attrs.add_argument("--attrs", help="JSON object of attributes.")
     set_attrs.add_argument("--attrs-file", help="Read attributes JSON object from file.")
 
+    upload_asset = sub.add_parser("upload-asset", help="Upload files to SiYuan assets.")
+    upload_asset.add_argument("files", nargs="+", help="File paths to upload.")
+    upload_asset.add_argument("--assets-dir", default="/assets/", help="Target assets directory path (default: /assets/).")
+
+    doc_outline = sub.add_parser("doc-outline", help="Get document outline (heading tree).")
+    doc_outline.add_argument("id", help="Document ID.")
+
     return parser
 
 
@@ -543,6 +598,12 @@ def main(argv: list[str] | None = None) -> int:
 
     _config_path, profile_name, profile = load_config(args)
     eprint(f"[profile: {profile_name}]")
+
+    if args.command == "upload-asset":
+        result = api_upload_asset(profile, args.files, args.assets_dir)
+        json_out(result)
+        return 0
+
     endpoint, payload = command_payload(args, profile)
     result = api_post(profile, endpoint, payload)
     json_out(result)
