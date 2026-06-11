@@ -46,6 +46,10 @@ When working from this repository root, `siyuan-cli update-docs` is enough.
 
 ## Quick Commands
 
+Always prefer dedicated commands over `siyuan-cli api`. Use `siyuan-cli api` only for endpoints that have no dedicated command.
+
+**Read / Search:**
+
 ```bash
 siyuan-cli notebooks
 siyuan-cli list-docs --notebook <notebook-id> --path /
@@ -54,20 +58,50 @@ siyuan-cli sql "SELECT id, content, hpath FROM blocks WHERE content LIKE '%å…³é”
 siyuan-cli get-block <block-id>
 siyuan-cli export-md <doc-id>
 siyuan-cli children <block-id>
-siyuan-cli create-doc --notebook <notebook-id> --path /Inbox/Title --markdown-file note.md
-siyuan-cli insert-block --parent-id <parent-id> --markdown-file note.md
-siyuan-cli append-block <parent-id> --markdown "New paragraph"
-siyuan-cli update-block <block-id> --markdown-file replacement.md
-siyuan-cli delete-block <block-id>
-siyuan-cli upload-asset /path/to/image.png --assets-dir /assets/
 siyuan-cli doc-outline <doc-id>
+siyuan-cli attrs <block-id>
+siyuan-cli hpath-by-id <block-or-doc-id>
+siyuan-cli ids-by-hpath /path/to/doc --notebook <notebook-id>
+```
+
+**Create:**
+
+```bash
+siyuan-cli create-notebook "Name"
+siyuan-cli create-doc --notebook <notebook-id> --path /Inbox/Title --markdown-file note.md
+siyuan-cli insert-block --previous-id <block-id> --markdown "Inserted after"
+siyuan-cli append-block <parent-id> --markdown "New paragraph"
+siyuan-cli prepend-block <parent-id> --markdown-file prepend.md
+```
+
+**Update:**
+
+```bash
+siyuan-cli rename-notebook <notebook-id> "New Name"
+siyuan-cli rename-doc --id <doc-id> --title "New title"
+siyuan-cli update-block <block-id> --markdown-file replacement.md
+siyuan-cli set-attrs <block-id> --attrs '{"custom-key":"value"}'
+```
+
+**Delete:**
+
+```bash
+siyuan-cli remove-doc --id <doc-id>
+siyuan-cli delete-block <block-id>
+```
+
+**Assets:**
+
+```bash
+siyuan-cli upload-asset /path/to/image.png --assets-dir /assets/
 ```
 
 Use `siyuan-cli api <endpoint> --data '{...}'` for official endpoints not yet wrapped by a dedicated command. Check the local official docs first so the request payload matches the current API.
 
 ## Workflow
 
-1. For lookup, start with `search` or `sql`, then read the selected block with `get-block`.
+1. Prefer dedicated commands for all write operations. Quick Commands above lists everything available; `siyuan-cli api` is only for endpoints without a dedicated command.
+2. For lookup, start with `search` or `sql`, then read the selected block with `get-block`.
 2. For whole-document reading, prefer `export-md <doc-id>`; for block-level reading, use `get-block` and `children`.
 3. For writes, resolve the destination notebook/document/block first. If a default notebook is configured, it may be used for document commands; otherwise pass `--notebook`.
 4. For long Markdown content, write a temporary file in the current workspace and pass `--markdown-file`.

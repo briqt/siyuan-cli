@@ -56,6 +56,24 @@ CONFIG_TEMPLATE = {
 }
 
 
+ENDPOINT_TO_COMMAND = {
+    "/api/filetree/removeDoc": "remove-doc --notebook <nb> --path <path>",
+    "/api/filetree/removeDocByID": "remove-doc --id <doc-id>",
+    "/api/filetree/renameDoc": "rename-doc --notebook <nb> --path <path> --title <title>",
+    "/api/filetree/renameDocByID": "rename-doc --id <doc-id> --title <title>",
+    "/api/filetree/createDocWithMd": "create-doc --notebook <nb> --path <path> --markdown '...'",
+    "/api/block/appendBlock": "append-block <parent-id> --markdown '...'",
+    "/api/block/prependBlock": "prepend-block <parent-id> --markdown '...'",
+    "/api/block/deleteBlock": "delete-block <block-id>",
+    "/api/block/updateBlock": "update-block <block-id> --markdown '...'",
+    "/api/block/insertBlock": "insert-block --previous-id <id> --markdown '...'",
+    "/api/attr/setBlockAttrs": "set-attrs <block-id> --attrs '{...}'",
+    "/api/attr/getBlockAttrs": "attrs <block-id>",
+    "/api/notebook/createNotebook": "create-notebook <name>",
+    "/api/notebook/renameNotebook": "rename-notebook <notebook-id> <name>",
+}
+
+
 def eprint(message: str) -> None:
     print(message, file=sys.stderr)
 
@@ -407,6 +425,11 @@ def command_payload(args: argparse.Namespace, profile: dict[str, Any]) -> tuple[
             return "/api/filetree/renameDocByID", {"id": args.id, "title": args.title}
         return "/api/filetree/renameDoc", {"notebook": default_notebook(profile, args.notebook), "path": required_value(args.path, "--path"), "title": args.title}
     if command == "remove-doc":
+        if not args.id and not args.path:
+            fail({"error": "remove-doc requires --id or --path", "examples": [
+                "siyuan-cli remove-doc --id <doc-id>",
+                "siyuan-cli remove-doc --notebook <nb-id> --path /path/to/doc.sy",
+            ]})
         if args.id:
             return "/api/filetree/removeDocByID", {"id": args.id}
         return "/api/filetree/removeDoc", {"notebook": default_notebook(profile, args.notebook), "path": required_value(args.path, "--path")}
@@ -605,6 +628,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     endpoint, payload = command_payload(args, profile)
+
+    if args.command == "api" and endpoint in ENDPOINT_TO_COMMAND:
+        eprint(f"[hint] This endpoint has a dedicated command: siyuan-cli {ENDPOINT_TO_COMMAND[endpoint]}")
+
     result = api_post(profile, endpoint, payload)
     json_out(result)
     return 0

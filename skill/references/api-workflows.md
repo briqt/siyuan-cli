@@ -1,5 +1,7 @@
 # SiYuan API Workflows
 
+This is the complete reference for all wrapped commands. SKILL.md Quick Commands is the short version — check here for full details and less common commands.
+
 Load this file when a task needs endpoint details, safe write sequencing, or a command that is not already obvious from `siyuan-cli --help`.
 
 ## Official Sources
