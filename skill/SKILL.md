@@ -108,6 +108,26 @@ Use `siyuan-cli api <endpoint> --data '{...}'` for official endpoints not yet wr
 5. Before replacing or deleting content, read the target block or export the target document and make sure it is unique.
 6. In the final answer, describe the note title/path or action result in human terms; include IDs only when useful for later edits.
 
+## Note Organization
+
+写入笔记时遵循以下组织原则：
+
+**核心方向**：笔记应自包含、信息密度优先、最小约束让结构有机生长。触发组织行为的时机：文档过长需要拆分、找不到该往哪写、或用户要求整理结构时。
+
+在思源中的具体应用：
+- **自包含**：每篇文档独立可理解，标题即摘要，首段即上下文
+- **最小约束**：不强制固定目录结构，按内容自然归类
+- **信息密度优先**：写的人花 2 分钟，读的人省 20 分钟
+- **单一权威源**：同一信息只在一处维护，其他地方用链接引用
+
+实践：
+- 新笔记优先追加到已有的主题文档，而非每条都创建新文档
+- 文档过长（>200 块）时拆分为子文档
+- 用思源的标签和属性替代 frontmatter 的 `type`/`tags` 角色
+- 需要跨文档导航时，用引用块或嵌入块，而非维护独立索引
+
+**完整方法论**：加载 `knowledge-project` skill 查看组织原则、生命周期管理和蒸馏流程的完整定义。若该 skill 不可用，参阅 https://raw.githubusercontent.com/briqt/knowledge-project/master/SKILL.md 。
+
 ## References
 
 Read `references/api-workflows.md` for safe sequencing and `references/official/` for the current vendored official API docs.
