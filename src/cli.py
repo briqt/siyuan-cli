@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
+import ipaddress
 import json
+import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -220,10 +224,67 @@ def parse_json_arg(raw: str | None, file_path: str | None) -> dict[str, Any]:
     return data
 
 
+def _no_proxy_bypass(host: str) -> bool:
+    """Return True if *host* should bypass the proxy per no_proxy/NO_PROXY.
+
+    The stdlib matcher urllib uses (proxy_bypass_environment) only does plain
+    host/domain-suffix matching -- it ignores CIDR ranges (e.g. 100.64.0.0/10)
+    and glob wildcards (e.g. 100.64.*, *.local). Tailscale/CGNAT hosts like
+    100.64.0.6 are only expressible that way, so the stdlib silently sends them
+    through the proxy (which can't reach the tailnet). This matcher honors all
+    three forms.
+    """
+    no_proxy = os.environ.get("no_proxy") or os.environ.get("NO_PROXY") or ""
+    if not no_proxy or not host:
+        return False
+    host = host.strip().strip("[]").lower()
+    host_ip = None
+    try:
+        host_ip = ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    for raw in no_proxy.split(","):
+        entry = raw.strip()
+        if not entry:
+            continue
+        if entry == "*":
+            return True
+        if "/" in entry:  # CIDR, e.g. 100.64.0.0/10
+            if host_ip is not None:
+                try:
+                    if host_ip in ipaddress.ip_network(entry, strict=False):
+                        return True
+                except ValueError:
+                    pass
+            continue
+        if "*" in entry or "?" in entry:  # glob, e.g. 100.64.* or *.local
+            if fnmatch.fnmatch(host, entry.lower()):
+                return True
+            continue
+        name = entry.lstrip(".").lower()  # plain host or domain suffix
+        if host == name or host.endswith("." + name):
+            return True
+    return False
+
+
+def _open(req: urllib.request.Request, timeout: int):
+    """Open *req* while honoring no_proxy correctly.
+
+    For no_proxy-matched hosts, use an empty ProxyHandler so the request goes
+    direct; otherwise use the default opener (which routes via env proxies).
+    """
+    host = urllib.parse.urlsplit(req.full_url).hostname or ""
+    if _no_proxy_bypass(host):
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    else:
+        opener = urllib.request.build_opener()
+    return opener.open(req, timeout=timeout)
+
+
 def fetch_text_url(url: str, timeout: int = 30) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": f"{SKILL_NAME}/{__version__}"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _open(req, timeout) as resp:
             return resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         fail({"error": "http error", "status": exc.code, "url": url})
@@ -301,7 +362,7 @@ def api_post(profile: dict[str, Any], endpoint: str, payload: dict[str, Any] | N
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _open(req, timeout) as resp:
             response_body = resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         response_body = exc.read().decode("utf-8", errors="replace")
@@ -348,7 +409,7 @@ def api_upload_asset(profile: dict[str, Any], files: list[str], assets_dir: str 
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _open(req, timeout) as resp:
             response_body = resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         response_body = exc.read().decode("utf-8", errors="replace")
