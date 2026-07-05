@@ -20,10 +20,10 @@ except ImportError:  # Allows `python src/cli.py --help` during local developmen
 
 SKILL_NAME = "siyuan-cli"
 DEFAULT_BASE_URL = "http://127.0.0.1:6806"
-OFFICIAL_API_DOC_URL = "https://github.com/siyuan-note/siyuan/blob/master/API.md"
-OFFICIAL_API_RAW_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API.md"
-OFFICIAL_API_DOC_ZH_URL = "https://github.com/siyuan-note/siyuan/blob/master/API_zh_CN.md"
-OFFICIAL_API_RAW_ZH_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API_zh_CN.md"
+OFFICIAL_API_DOC_URL = "https://github.com/siyuan-note/siyuan/blob/master/docs/API.md"
+OFFICIAL_API_RAW_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/docs/API.md"
+OFFICIAL_API_DOC_ZH_URL = "https://github.com/siyuan-note/siyuan/blob/master/docs/API.zh-CN.md"
+OFFICIAL_API_RAW_ZH_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/docs/API.zh-CN.md"
 OFFICIAL_ROUTER_URL = "https://github.com/siyuan-note/siyuan/blob/master/kernel/api/router.go"
 OFFICIAL_ROUTER_RAW_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/kernel/api/router.go"
 OFFICIAL_DOCS = [

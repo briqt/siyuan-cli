@@ -3,24 +3,24 @@
   "files": [
     {
       "name": "api-zh",
-      "path": "skill/references/official/API_zh_CN.md",
-      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/API_zh_CN.md",
-      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API_zh_CN.md",
-      "bytes": 30246
+      "path": "/home/wangl/codes/siyuan-cli/skill/references/official/API_zh_CN.md",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/docs/API.zh-CN.md",
+      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/docs/API.zh-CN.md",
+      "bytes": 57131
     },
     {
       "name": "api-en",
-      "path": "skill/references/official/API.md",
-      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/API.md",
-      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/API.md",
-      "bytes": 31725
+      "path": "/home/wangl/codes/siyuan-cli/skill/references/official/API.md",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/docs/API.md",
+      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/docs/API.md",
+      "bytes": 59163
     },
     {
       "name": "api-router",
-      "path": "skill/references/official/kernel-api-router.go",
+      "path": "/home/wangl/codes/siyuan-cli/skill/references/official/kernel-api-router.go",
       "source_url": "https://github.com/siyuan-note/siyuan/blob/master/kernel/api/router.go",
       "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/kernel/api/router.go",
-      "bytes": 57180
+      "bytes": 63269
     }
   ]
 }
