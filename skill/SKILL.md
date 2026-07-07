@@ -64,6 +64,8 @@ siyuan-cli hpath-by-id <block-or-doc-id>
 siyuan-cli ids-by-hpath /path/to/doc --notebook <notebook-id>
 ```
 
+> **`sql` 默认约 64 行上限**：`sql`（`/api/query/sql`）不显式写 `LIMIT` 时只返回约 64 行并静默截断——曾据此误判"某文档树只有 63 个子文档"，实际上百个。枚举/取全量务必加 `LIMIT 9999`；核总数用 `SELECT COUNT(*)`（不受行限影响）；`COUNT` 与枚举条数对不上，几乎一定是行限截断而非数据缺失。
+
 **Create:**
 
 ```bash
