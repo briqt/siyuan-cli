@@ -19,7 +19,8 @@ siyuan-cli notebooks
 siyuan-cli search "keyword"
 siyuan-cli export-md <doc-id>
 siyuan-cli create-doc --notebook <notebook-id> --path /Inbox/hello --markdown "# Hello"
-siyuan-cli api /api/system/version
+siyuan-cli -V              # siyuan-cli's own version
+siyuan-cli version        # the connected SiYuan server's version
 ```
 
 Update vendored official docs:

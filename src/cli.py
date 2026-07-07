@@ -443,7 +443,7 @@ def command_payload(args: argparse.Namespace, profile: dict[str, Any]) -> tuple[
     command = args.command
     if command == "api":
         return args.endpoint, parse_json_arg(args.data, args.data_file)
-    if command == "version":
+    if command in ("version", "server-version"):
         return "/api/system/version", {}
     if command == "current-time":
         return "/api/system/currentTime", {}
@@ -540,6 +540,10 @@ def command_payload(args: argparse.Namespace, profile: dict[str, Any]) -> tuple[
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Operate SiYuan notes through the local HTTP API.")
+    parser.add_argument(
+        "-V", "--version", action="version", version=f"siyuan-cli {__version__}",
+        help="Show the siyuan-cli version and exit (for the connected server's version, use the `version` command).",
+    )
     parser.add_argument("--profile", help="Profile name from config.json.")
     parser.add_argument("--config", help="Explicit config.json path.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -547,7 +551,8 @@ def build_parser() -> argparse.ArgumentParser:
     init = sub.add_parser("init-config", help="Create the user config file.")
     init.add_argument("--overwrite", action="store_true")
 
-    sub.add_parser("version", help="Get SiYuan system version.")
+    sub.add_parser("version", help="Get the connected SiYuan server's version (for the CLI version use -V/--version).")
+    sub.add_parser("server-version", help="Alias of `version`: the connected SiYuan server's version.")
     sub.add_parser("current-time", help="Get SiYuan system time.")
     sub.add_parser("notebooks", help="List notebooks.")
 
