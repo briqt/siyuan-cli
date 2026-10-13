@@ -1,11 +1,15 @@
 ---
 name: siyuan-cli
-description: Operate SiYuan Note / 思源笔记 through a local CLI backed by the official HTTP API. Use when the user asks to search, read, create, append, update, delete, organize, export, or inspect SiYuan notebooks, documents, blocks, attributes, or SQL query results; when they mention 思源笔记, SiYuan, block IDs, notebook IDs, or the local SiYuan API; or when an agent needs durable note capture into SiYuan.
+description: Operate SiYuan Note / 思源笔记 through the local `siyuan-cli` CLI backed by the official HTTP API. Use when the user wants to search, read, export, create, append, update, move, rename, or delete SiYuan notebooks, documents, or blocks; capture notes or quick thoughts into SiYuan or today's daily note (日记); find backlinks/references (反链、双链、引用), tags, bookmarks, or recently edited content; read or set block attributes; upload assets; or run SQL over the SiYuan database. Also use when they mention 思源笔记, SiYuan, block IDs (like 20240101120000-abc1234), notebook IDs, or the local SiYuan API on port 6806.
 ---
 
 # SiYuan CLI
 
-Use `siyuan-cli` instead of ad hoc curl calls. It handles config discovery, profile selection, token auth, JSON output, common API error reporting, and local maintenance of official SiYuan API references.
+Use `siyuan-cli` instead of ad hoc curl calls. It handles config discovery, profile selection, token auth, strict API payload shapes, compact JSON output, and error reporting.
+
+Every command prints JSON `{"code": 0, "msg": "", "data": ...}` to stdout. stderr carries `[profile: <name>]`, plus `[warn]` (e.g. truncated SQL) and `[hint]` lines worth reading. Errors go to stderr as JSON with a non-zero exit code.
+
+**IDs at a glance**: every block, document, and notebook has an ID like `20240101120000-abc1234`. A document is itself a block, so a doc ID works wherever a block ID is expected. In results, `rootID`/`root_id` is the containing document's ID and `box` is the notebook ID.
 
 ## Setup
 
@@ -13,6 +17,8 @@ Install the CLI if it is unavailable:
 
 ```bash
 pipx install git+https://github.com/briqt/siyuan-cli.git
+# upgrade an existing install:
+pipx install --force git+https://github.com/briqt/siyuan-cli.git
 ```
 
 Initialize config:
@@ -24,27 +30,17 @@ open ~/.config/agent-skills/siyuan-cli/config.json
 
 Set `profiles.default.token` from SiYuan `设置 - 鉴权 - API token` (Settings > Auth > API token). Set `base_url` to the current SiYuan API URL if it is not `http://127.0.0.1:6806`. Optionally set `default_notebook` and `default_doc_path`.
 
-The CLI prints `[profile: <name>]` to stderr on every run, JSON to stdout, and `[warn]`/`[hint]` lines to stderr. Use `--profile <name>` for alternate SiYuan instances.
+Use `--profile <name>` for alternate SiYuan instances. `siyuan-cli version` checks connectivity (server version); `siyuan-cli -V` shows the CLI version.
 
-## Official Docs
+Troubleshooting:
 
-Before using an unfamiliar endpoint, read the vendored official docs under `references/official/`:
-
-```bash
-rg -n "/api/block/appendBlock|插入后置子块" references/official/API_zh_CN.md
-rg -n "/api/block/appendBlock" references/official/API.md
-rg -n "appendBlock" references/official/kernel-api-router.go
-```
-
-Only endpoints with their own section in `API*.md` are public and stable; other routes in `kernel-api-router.go` are internal and may change. `DOCUMENT-HPATH.md` explains how document titles map to hPaths.
-
-If the official docs are missing or stale, update them from the SiYuan official GitHub repo:
-
-```bash
-siyuan-cli update-docs --references-dir <skill-root>/references
-```
-
-When working from this repository root, `siyuan-cli update-docs` is enough.
+| stderr error | Fix |
+|---|---|
+| `config not found` / `token is not configured` | Run `siyuan-cli init-config`, then ask the user for the token and put it in the config file |
+| `http error` 401/403 | Token is wrong or was regenerated; ask the user for the current one |
+| `network error` | SiYuan is not running or `base_url` is unreachable; check `base_url`, and that `no_proxy` covers the host if a proxy is set |
+| `Field [...] has an invalid type` | Payload shape is wrong (usually in `siyuan-cli api`); check the official docs for that endpoint |
+| `unrecognized arguments` / `invalid choice` | Run `siyuan-cli <command> --help` |
 
 ## Quick Commands
 
@@ -60,8 +56,8 @@ siyuan-cli search "a b" --method query                         # also: regex, sq
 siyuan-cli search-docs "标题关键词"                              # documents by title/path
 siyuan-cli sql "SELECT id, content, hpath FROM blocks WHERE content LIKE '%关键词%' ORDER BY hpath, id LIMIT 50"
 siyuan-cli recent --limit 20                                   # recently updated blocks
-siyuan-cli backlinks <block-or-doc-id> [--mentions] [--blocks]
-siyuan-cli tags [keyword]
+siyuan-cli backlinks <block-or-doc-id>                  # docs that reference it; --blocks for referencing blocks with content, --mentions for unlinked mentions
+siyuan-cli tags [keyword]                              # tag tree, or matching tags
 siyuan-cli bookmarks
 ```
 
@@ -107,8 +103,8 @@ siyuan-cli move-block <block-id> --previous-id <sibling-id>    # or --parent-id 
 siyuan-cli move-doc <doc-id>... --to <parent-doc-id-or-notebook-id>
 siyuan-cli rename-doc --id <doc-id> --title "New title"
 siyuan-cli rename-notebook <notebook-id> "New Name"
-siyuan-cli set-attrs <block-id> --attrs '{"custom-key":"value"}'
-siyuan-cli fold-block <block-id> / unfold-block <block-id>
+siyuan-cli set-attrs <block-id> --attrs '{"custom-status":"done"}'   # custom attrs need the custom- prefix; null removes
+siyuan-cli fold-block <block-id>                     # unfold-block to expand
 ```
 
 `update-block` replaces exactly one block; to edit and also add content, update the block then `insert-block --previous-id` it. `--lock-type` rejects edits that would change the block type (e.g. paragraph → heading).
@@ -140,6 +136,26 @@ Block references in Markdown use `((block-id "anchor text"))`, never `[[block-id
 7. A `code: 0` response means the request was accepted; it does not guarantee indexes are refreshed. If a follow-up search misses fresh content, read by ID instead.
 8. In the final answer, describe the note title/path or action result in human terms; include IDs only when useful for later edits.
 
+## Official Docs
+
+Before using an unfamiliar endpoint, read the vendored official docs under `references/official/`:
+
+```bash
+rg -n "/api/block/appendBlock|插入后置子块" references/official/API_zh_CN.md
+rg -n "/api/block/appendBlock" references/official/API.md
+rg -n "appendBlock" references/official/kernel-api-router.go
+```
+
+Only endpoints with their own section in `API*.md` are public and stable; other routes in `kernel-api-router.go` are internal and may change. `DOCUMENT-HPATH.md` explains how document titles map to hPaths.
+
+If the official docs are missing or stale, update them from the SiYuan official GitHub repo:
+
+```bash
+siyuan-cli update-docs --references-dir <skill-root>/references
+```
+
+When working from this repository root, `siyuan-cli update-docs` is enough.
+
 ## Note Organization
 
 写入笔记时遵循以下组织原则：
@@ -162,4 +178,5 @@ Block references in Markdown use `((block-id "anchor text"))`, never `[[block-id
 
 ## References
 
-Read `references/api-workflows.md` for safe sequencing and `references/official/` for the current vendored official API docs.
+- `references/api-workflows.md` — API semantics, lookup strategy, safe write sequencing, raw endpoints without a dedicated command
+- `references/official/` — vendored official API docs (see Official Docs above)
