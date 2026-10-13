@@ -1,26 +1,34 @@
 {
   "official_repository": "https://github.com/siyuan-note/siyuan",
+  "commit": "fb3355f07d22bff36f1d785999fd5ded6a90d468",
   "files": [
     {
       "name": "api-zh",
-      "path": "/home/wangl/codes/siyuan-cli/skill/references/official/API_zh_CN.md",
-      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/docs/API.zh-CN.md",
-      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/docs/API.zh-CN.md",
-      "bytes": 57131
+      "path": "API_zh_CN.md",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/fb3355f07d22bff36f1d785999fd5ded6a90d468/docs/API.zh-CN.md",
+      "bytes": 82024,
+      "sha256": "590fa8d83c4e7f25b85e7df5d391c2689b1859d9e1dee068fb4fec17481b69fa"
     },
     {
       "name": "api-en",
-      "path": "/home/wangl/codes/siyuan-cli/skill/references/official/API.md",
-      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/docs/API.md",
-      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/docs/API.md",
-      "bytes": 59163
+      "path": "API.md",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/fb3355f07d22bff36f1d785999fd5ded6a90d468/docs/API.md",
+      "bytes": 87284,
+      "sha256": "b404e3b15fb63dff33c680e7fd6552c1c31f440486a58ddd779e3786e7a97bf2"
     },
     {
       "name": "api-router",
-      "path": "/home/wangl/codes/siyuan-cli/skill/references/official/kernel-api-router.go",
-      "source_url": "https://github.com/siyuan-note/siyuan/blob/master/kernel/api/router.go",
-      "raw_url": "https://raw.githubusercontent.com/siyuan-note/siyuan/master/kernel/api/router.go",
-      "bytes": 63269
+      "path": "kernel-api-router.go",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/fb3355f07d22bff36f1d785999fd5ded6a90d468/kernel/api/router.go",
+      "bytes": 82535,
+      "sha256": "aab11332a1ad6e507c3178e959ce73eb946a51b296e686fc106a07c649f99dd5"
+    },
+    {
+      "name": "document-hpath",
+      "path": "DOCUMENT-HPATH.md",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/fb3355f07d22bff36f1d785999fd5ded6a90d468/docs/DOCUMENT-HPATH.md",
+      "bytes": 5146,
+      "sha256": "d77888330fe499a9ad7f942ab52a34948a7ecd41046b8826716094306cbb2044"
     }
   ]
 }
