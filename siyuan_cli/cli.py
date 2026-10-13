@@ -1,201 +1,68 @@
 from __future__ import annotations
 
 import argparse
-import fnmatch
-import ipaddress
+import html
 import json
-import os
-import sys
-import urllib.error
-import urllib.parse
-import urllib.request
+import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-try:
-    from . import __version__
-except ImportError:  # Allows `python src/cli.py --help` during local development.
-    __version__ = "0.1.0"
+from . import __version__
+from .client import SiYuanClient, eprint, fail, init_config, json_out, load_config
+from .docs import update_docs
 
-
-SKILL_NAME = "siyuan-cli"
-DEFAULT_BASE_URL = "http://127.0.0.1:6806"
-OFFICIAL_API_DOC_URL = "https://github.com/siyuan-note/siyuan/blob/master/docs/API.md"
-OFFICIAL_API_RAW_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/docs/API.md"
-OFFICIAL_API_DOC_ZH_URL = "https://github.com/siyuan-note/siyuan/blob/master/docs/API.zh-CN.md"
-OFFICIAL_API_RAW_ZH_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/docs/API.zh-CN.md"
-OFFICIAL_ROUTER_URL = "https://github.com/siyuan-note/siyuan/blob/master/kernel/api/router.go"
-OFFICIAL_ROUTER_RAW_URL = "https://raw.githubusercontent.com/siyuan-note/siyuan/master/kernel/api/router.go"
-OFFICIAL_DOCS = [
-    {
-        "name": "api-zh",
-        "filename": "API_zh_CN.md",
-        "source_url": OFFICIAL_API_DOC_ZH_URL,
-        "raw_url": OFFICIAL_API_RAW_ZH_URL,
-    },
-    {
-        "name": "api-en",
-        "filename": "API.md",
-        "source_url": OFFICIAL_API_DOC_URL,
-        "raw_url": OFFICIAL_API_RAW_URL,
-    },
-    {
-        "name": "api-router",
-        "filename": "kernel-api-router.go",
-        "source_url": OFFICIAL_ROUTER_URL,
-        "raw_url": OFFICIAL_ROUTER_RAW_URL,
-    },
+BLOCK_ID_RE = re.compile(r"^\d{14}-[0-9a-z]{7}$")
+SEARCH_TYPES = [
+    "document", "heading", "list", "listItem", "codeBlock", "mathBlock", "table", "blockquote",
+    "superBlock", "paragraph", "htmlBlock", "embedBlock", "databaseBlock", "audioBlock", "videoBlock",
+    "iframeBlock", "widgetBlock", "callout", "tabs", "tabItem",
 ]
-CONFIG_TEMPLATE = {
-    "active": "default",
-    "profiles": {
-        "default": {
-            "base_url": DEFAULT_BASE_URL,
-            "token": "",
-            "timeout_seconds": 30,
-            "default_notebook": "",
-            "default_doc_path": "/Inbox",
-        }
-    },
+SEARCH_METHODS = {"keyword": 0, "query": 1, "sql": 2, "regex": 3}
+SEARCH_ORDERS = {
+    "type": 0, "created-asc": 1, "created-desc": 2, "updated-asc": 3, "updated-desc": 4,
+    "content": 5, "relevance-asc": 6, "relevance-desc": 7,
 }
+SNIPPET_CHARS = 300
 
-
+# Raw `api` calls to these endpoints get a stderr hint pointing at the dedicated command.
 ENDPOINT_TO_COMMAND = {
-    "/api/filetree/removeDoc": "remove-doc --notebook <nb> --path <path>",
-    "/api/filetree/removeDocByID": "remove-doc --id <doc-id>",
-    "/api/filetree/renameDoc": "rename-doc --notebook <nb> --path <path> --title <title>",
-    "/api/filetree/renameDocByID": "rename-doc --id <doc-id> --title <title>",
-    "/api/filetree/createDocWithMd": "create-doc --notebook <nb> --path <path> --markdown '...'",
-    "/api/block/appendBlock": "append-block <parent-id> --markdown '...'",
-    "/api/block/prependBlock": "prepend-block <parent-id> --markdown '...'",
-    "/api/block/deleteBlock": "delete-block <block-id>",
-    "/api/block/updateBlock": "update-block <block-id> --markdown '...'",
-    "/api/block/insertBlock": "insert-block --previous-id <id> --markdown '...'",
-    "/api/attr/setBlockAttrs": "set-attrs <block-id> --attrs '{...}'",
-    "/api/attr/getBlockAttrs": "attrs <block-id>",
     "/api/notebook/createNotebook": "create-notebook <name>",
     "/api/notebook/renameNotebook": "rename-notebook <notebook-id> <name>",
+    "/api/notebook/removeNotebook": "remove-notebook <notebook-id>",
+    "/api/notebook/getNotebookConf": "notebook-conf <notebook-id>",
+    "/api/filetree/createDocWithMd": "create-doc --notebook <nb> --path <path> --markdown '...'",
+    "/api/filetree/renameDoc": "rename-doc --notebook <nb> --path <path> --title <title>",
+    "/api/filetree/renameDocByID": "rename-doc --id <doc-id> --title <title>",
+    "/api/filetree/removeDoc": "remove-doc --notebook <nb> --path <path>",
+    "/api/filetree/removeDocByID": "remove-doc --id <doc-id>",
+    "/api/filetree/moveDocsByID": "move-doc <doc-id>... --to <parent-doc-or-notebook-id>",
+    "/api/filetree/searchDocs": "search-docs <keyword>",
+    "/api/filetree/createDailyNote": "daily-note --notebook <nb>",
+    "/api/block/appendDailyNoteBlock": "daily-note --notebook <nb> --markdown '...'",
+    "/api/block/prependDailyNoteBlock": "daily-note --notebook <nb> --prepend --markdown '...'",
+    "/api/block/appendBlock": "append-block <parent-id> --markdown '...'",
+    "/api/block/prependBlock": "prepend-block <parent-id> --markdown '...'",
+    "/api/block/insertBlock": "insert-block --previous-id <id> --markdown '...'",
+    "/api/block/updateBlock": "update-block <block-id> --markdown '...'",
+    "/api/block/deleteBlock": "delete-block <block-id>",
+    "/api/block/moveBlock": "move-block <block-id> --previous-id <id> | --parent-id <id>",
+    "/api/block/getBlockKramdown": "get-block <block-id>",
+    "/api/block/getBlockKramdowns": "get-blocks <block-id>...",
+    "/api/block/getBlockInfo": "block-info <block-id>",
+    "/api/block/getDocInfo": "doc-info <doc-id>",
+    "/api/block/getBlockBreadcrumb": "breadcrumb <block-id>",
+    "/api/block/getRecentUpdatedBlocks": "recent",
+    "/api/attr/setBlockAttrs": "set-attrs <block-id> --attrs '{...}'",
+    "/api/attr/getBlockAttrs": "attrs <block-id>",
+    "/api/search/fullTextSearchBlock": "search <query>",
+    "/api/query/sql": "sql '<SELECT ...>'",
+    "/api/ref/getBacklink2": "backlinks <block-id>",
+    "/api/tag/getTag": "tags",
+    "/api/bookmark/getBookmark": "bookmarks",
 }
 
 
-def eprint(message: str) -> None:
-    print(message, file=sys.stderr)
-
-
-def json_out(payload: Any) -> None:
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-
-
-def user_config_path() -> Path:
-    return Path.home() / ".config" / "agent-skills" / SKILL_NAME / "config.json"
-
-
-def searched_config_paths(explicit: str | None = None) -> list[Path]:
-    paths: list[Path] = []
-    if explicit:
-        paths.append(Path(explicit).expanduser())
-    paths.extend(
-        [
-            Path.cwd() / ".config.json",
-            Path.cwd() / "skill" / ".config.json",
-            user_config_path(),
-        ]
-    )
-    seen: set[Path] = set()
-    unique: list[Path] = []
-    for path in paths:
-        resolved = path.expanduser()
-        if resolved not in seen:
-            seen.add(resolved)
-            unique.append(resolved)
-    return unique
-
-
-def init_config(overwrite: bool = False) -> dict[str, Any]:
-    target = user_config_path()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists() and not overwrite:
-        return {
-            "ok": True,
-            "message": "config already exists",
-            "path": str(target),
-            "next": f"open {target}",
-        }
-    target.write_text(json.dumps(CONFIG_TEMPLATE, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {
-        "ok": True,
-        "message": "created config from template",
-        "path": str(target),
-        "next": f"open {target}",
-    }
-
-
-def fail(payload: dict[str, Any], code: int = 1) -> None:
-    eprint(json.dumps(payload, ensure_ascii=False, indent=2))
-    raise SystemExit(code)
-
-
-def load_config(args: argparse.Namespace) -> tuple[Path, str, dict[str, Any]]:
-    searched = searched_config_paths(getattr(args, "config", None))
-    for path in searched:
-        if not path.exists():
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            fail(
-                {
-                    "error": "invalid config json",
-                    "path": str(path),
-                    "detail": str(exc),
-                    "searched": [str(p) for p in searched],
-                    "repair": f"siyuan-cli init-config && open {user_config_path()}",
-                }
-            )
-        profiles = data.get("profiles")
-        if not isinstance(profiles, dict):
-            fail(
-                {
-                    "error": "config missing profiles object",
-                    "path": str(path),
-                    "searched": [str(p) for p in searched],
-                    "repair": f"siyuan-cli init-config && open {user_config_path()}",
-                }
-            )
-        profile_name = args.profile or data.get("active") or "default"
-        profile = profiles.get(profile_name)
-        if not isinstance(profile, dict):
-            fail(
-                {
-                    "error": "profile not found",
-                    "profile": profile_name,
-                    "path": str(path),
-                    "available_profiles": sorted(profiles.keys()),
-                }
-            )
-        base_url = profile.get("base_url") or DEFAULT_BASE_URL
-        token = profile.get("token", "")
-        if not isinstance(base_url, str) or not base_url.startswith(("http://", "https://")):
-            fail({"error": "invalid base_url", "profile": profile_name, "path": str(path)})
-        if not isinstance(token, str) or not token.strip():
-            fail(
-                {
-                    "error": "SiYuan API token is not configured",
-                    "profile": profile_name,
-                    "path": str(path),
-                    "searched": [str(p) for p in searched],
-                    "repair": f"open {path}",
-                    "repair_note": f"Set profiles.{profile_name}.token from SiYuan Settings > About.",
-                }
-            )
-        return path, profile_name, profile
-    fail(
-        {
-            "error": "config not found",
-            "searched": [str(p) for p in searched],
-            "repair": f"siyuan-cli init-config && open {user_config_path()}",
-        }
-    )
+# --- argument helpers -------------------------------------------------------
 
 
 def read_text_arg(value: str | None, file_value: str | None, field: str) -> str:
@@ -208,9 +75,9 @@ def read_text_arg(value: str | None, file_value: str | None, field: str) -> str:
     fail({"error": f"missing --{field} or --{field}-file"})
 
 
-def parse_json_arg(raw: str | None, file_path: str | None) -> dict[str, Any]:
+def parse_json_arg(raw: str | None, file_path: str | None, flag: str = "data") -> dict[str, Any]:
     if raw and file_path:
-        fail({"error": "pass either --data or --data-file, not both"})
+        fail({"error": f"pass either --{flag} or --{flag}-file, not both"})
     if file_path:
         raw = Path(file_path).expanduser().read_text(encoding="utf-8")
     if not raw:
@@ -224,482 +91,430 @@ def parse_json_arg(raw: str | None, file_path: str | None) -> dict[str, Any]:
     return data
 
 
-def _no_proxy_bypass(host: str) -> bool:
-    """Return True if *host* should bypass the proxy per no_proxy/NO_PROXY.
-
-    The stdlib matcher urllib uses (proxy_bypass_environment) only does plain
-    host/domain-suffix matching -- it ignores CIDR ranges (e.g. 100.64.0.0/10)
-    and glob wildcards (e.g. 100.64.*, *.local). Tailscale/CGNAT hosts like
-    100.64.0.6 are only expressible that way, so the stdlib silently sends them
-    through the proxy (which can't reach the tailnet). This matcher honors all
-    three forms.
-    """
-    no_proxy = os.environ.get("no_proxy") or os.environ.get("NO_PROXY") or ""
-    if not no_proxy or not host:
-        return False
-    host = host.strip().strip("[]").lower()
-    host_ip = None
-    try:
-        host_ip = ipaddress.ip_address(host)
-    except ValueError:
-        pass
-    for raw in no_proxy.split(","):
-        entry = raw.strip()
-        if not entry:
-            continue
-        if entry == "*":
-            return True
-        if "/" in entry:  # CIDR, e.g. 100.64.0.0/10
-            if host_ip is not None:
-                try:
-                    if host_ip in ipaddress.ip_network(entry, strict=False):
-                        return True
-                except ValueError:
-                    pass
-            continue
-        if "*" in entry or "?" in entry:  # glob, e.g. 100.64.* or *.local
-            if fnmatch.fnmatch(host, entry.lower()):
-                return True
-            continue
-        name = entry.lstrip(".").lower()  # plain host or domain suffix
-        if host == name or host.endswith("." + name):
-            return True
-    return False
+def block_id(value: str) -> str:
+    """argparse type for IDs that may be interpolated into SQL."""
+    if not BLOCK_ID_RE.match(value):
+        raise argparse.ArgumentTypeError(f"invalid block ID {value!r} (expected like 20240101120000-abc1234)")
+    return value
 
 
-def _open(req: urllib.request.Request, timeout: int):
-    """Open *req* while honoring no_proxy correctly.
-
-    For no_proxy-matched hosts, use an empty ProxyHandler so the request goes
-    direct; otherwise use the default opener (which routes via env proxies).
-    """
-    host = urllib.parse.urlsplit(req.full_url).hostname or ""
-    if _no_proxy_bypass(host):
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    else:
-        opener = urllib.request.build_opener()
-    return opener.open(req, timeout=timeout)
-
-
-def fetch_text_url(url: str, timeout: int = 30) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": f"{SKILL_NAME}/{__version__}"})
-    try:
-        with _open(req, timeout) as resp:
-            return resp.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as exc:
-        fail({"error": "http error", "status": exc.code, "url": url})
-    except urllib.error.URLError as exc:
-        fail({"error": "network error", "url": url, "detail": str(exc)})
-
-
-def detect_references_dir(explicit: str | None = None) -> Path:
-    if explicit:
-        return Path(explicit).expanduser()
-    candidates = [
-        Path.cwd() / "skill" / "references",
-        Path.cwd() / "references",
-    ]
-    for candidate in candidates:
-        if candidate.exists() and candidate.is_dir():
-            return candidate
-    fail(
-        {
-            "error": "references directory not found",
-            "searched": [str(p) for p in candidates],
-            "repair": "Run from the repository root or pass --references-dir /path/to/skill/references.",
-        }
-    )
-
-
-def update_docs_payload(args: argparse.Namespace) -> dict[str, Any]:
-    references_dir = detect_references_dir(args.references_dir)
-    official_dir = references_dir / "official"
-    official_dir.mkdir(parents=True, exist_ok=True)
-    files = []
-    for item in OFFICIAL_DOCS:
-        text = fetch_text_url(item["raw_url"], timeout=args.timeout)
-        target = official_dir / item["filename"]
-        target.write_text(text, encoding="utf-8")
-        files.append(
-            {
-                "name": item["name"],
-                "path": str(target),
-                "source_url": item["source_url"],
-                "raw_url": item["raw_url"],
-                "bytes": len(text.encode("utf-8")),
-            }
-        )
-    manifest = {
-        "official_repository": "https://github.com/siyuan-note/siyuan",
-        "files": files,
-    }
-    manifest_path = official_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {
-        "ok": True,
-        "references_dir": str(references_dir),
-        "official_dir": str(official_dir),
-        "manifest": str(manifest_path),
-        "files": files,
-    }
-
-
-def api_post(profile: dict[str, Any], endpoint: str, payload: dict[str, Any] | None = None) -> Any:
-    base_url = (profile.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
-    endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
-    url = f"{base_url}{endpoint}"
-    body = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8")
-    timeout = int(profile.get("timeout_seconds") or 30)
-    req = urllib.request.Request(
-        url,
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": f"Token {profile['token']}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": f"{SKILL_NAME}/{__version__}",
-        },
-    )
-    try:
-        with _open(req, timeout) as resp:
-            response_body = resp.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as exc:
-        response_body = exc.read().decode("utf-8", errors="replace")
-        fail({"error": "http error", "status": exc.code, "endpoint": endpoint, "body": response_body})
-    except urllib.error.URLError as exc:
-        fail({"error": "network error", "endpoint": endpoint, "detail": str(exc)})
-
-    try:
-        data = json.loads(response_body)
-    except json.JSONDecodeError:
-        return {"raw": response_body}
-
-    if isinstance(data, dict) and data.get("code", 0) != 0:
-        fail({"error": "SiYuan API error", "endpoint": endpoint, "response": data})
-    return data
-
-
-def api_upload_asset(profile: dict[str, Any], files: list[str], assets_dir: str = "/assets/") -> Any:
-    import mimetypes
-    import uuid
-
-    base_url = (profile.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
-    url = f"{base_url}/api/asset/upload"
-    timeout = int(profile.get("timeout_seconds") or 30)
-    boundary = uuid.uuid4().hex
-
-    parts: list[bytes] = []
-    parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"assetsDirPath\"\r\n\r\n{assets_dir}\r\n".encode())
-    for filepath in files:
-        p = Path(filepath).expanduser()
-        if not p.exists():
-            fail({"error": "file not found", "path": str(p)})
-        mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
-        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"file[]\"; filename=\"{p.name}\"\r\nContent-Type: {mime}\r\n\r\n".encode() + p.read_bytes() + b"\r\n")
-    parts.append(f"--{boundary}--\r\n".encode())
-    body = b"".join(parts)
-
-    req = urllib.request.Request(
-        url, data=body, method="POST",
-        headers={
-            "Authorization": f"Token {profile['token']}",
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "User-Agent": f"{SKILL_NAME}/{__version__}",
-        },
-    )
-    try:
-        with _open(req, timeout) as resp:
-            response_body = resp.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as exc:
-        response_body = exc.read().decode("utf-8", errors="replace")
-        fail({"error": "http error", "status": exc.code, "endpoint": "/api/asset/upload", "body": response_body})
-    except urllib.error.URLError as exc:
-        fail({"error": "network error", "endpoint": "/api/asset/upload", "detail": str(exc)})
-
-    try:
-        data = json.loads(response_body)
-    except json.JSONDecodeError:
-        return {"raw": response_body}
-    if isinstance(data, dict) and data.get("code", 0) != 0:
-        fail({"error": "SiYuan API error", "endpoint": "/api/asset/upload", "response": data})
-    return data
-
-
-def default_notebook(profile: dict[str, Any], explicit: str | None = None) -> str:
+def notebook_id(profile: dict[str, Any], explicit: str | None) -> str:
     notebook = explicit or profile.get("default_notebook")
     if not notebook:
         fail({"error": "missing notebook", "hint": "Pass --notebook or set default_notebook in config.json."})
     return notebook
 
 
-def required_value(value: str | None, name: str) -> str:
-    if not value:
-        fail({"error": f"missing {name}"})
-    return value
+def resolve_doc_path(profile: dict[str, Any], path: str) -> str:
+    """Absolute hPaths pass through; a bare title lands under default_doc_path."""
+    if path.startswith("/"):
+        return path
+    base = (profile.get("default_doc_path") or "/").rstrip("/")
+    return f"{base}/{path}"
 
 
-def command_payload(args: argparse.Namespace, profile: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    command = args.command
-    if command == "api":
-        return args.endpoint, parse_json_arg(args.data, args.data_file)
-    if command in ("version", "server-version"):
-        return "/api/system/version", {}
-    if command == "current-time":
-        return "/api/system/currentTime", {}
-    if command == "notebooks":
-        return "/api/notebook/lsNotebooks", {}
-    if command == "create-notebook":
-        return "/api/notebook/createNotebook", {"name": args.name}
-    if command == "rename-notebook":
-        return "/api/notebook/renameNotebook", {"notebook": args.notebook, "name": args.name}
-    if command == "open-notebook":
-        return "/api/notebook/openNotebook", {"notebook": args.notebook}
-    if command == "close-notebook":
-        return "/api/notebook/closeNotebook", {"notebook": args.notebook}
-    if command == "search":
-        payload = {
-            "query": args.query,
-            "page": args.page,
-            "pageSize": args.page_size,
+def snippet(text: str | None, limit: int = SNIPPET_CHARS) -> str:
+    text = html.unescape(re.sub(r"<[^>]+>", "", text or "")).strip()
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
+def with_data(response: Any, data: Any) -> Any:
+    if isinstance(response, dict) and "data" in response:
+        return {**response, "data": data}
+    return response
+
+
+def markdown_of(args: argparse.Namespace) -> str:
+    return read_text_arg(args.markdown, args.markdown_file, "markdown")
+
+
+# --- command handlers -------------------------------------------------------
+# Each handler takes (args, client) and returns the JSON value printed to stdout.
+
+Handler = Callable[[argparse.Namespace, SiYuanClient], Any]
+
+
+def simple(endpoint: str, build: Callable[[argparse.Namespace, dict[str, Any]], dict[str, Any]] | None = None) -> Handler:
+    def handler(args: argparse.Namespace, client: SiYuanClient) -> Any:
+        return client.post(endpoint, build(args, client.profile) if build else {})
+
+    return handler
+
+
+def cmd_api(args, client):
+    endpoint = args.endpoint if args.endpoint.startswith("/") else f"/{args.endpoint}"
+    if endpoint in ENDPOINT_TO_COMMAND:
+        eprint(f"[hint] This endpoint has a dedicated command: siyuan-cli {ENDPOINT_TO_COMMAND[endpoint]}")
+    return client.post(endpoint, parse_json_arg(args.data, args.data_file))
+
+
+def cmd_search(args, client):
+    payload: dict[str, Any] = {"query": args.query, "page": args.page, "pageSize": args.page_size}
+    payload["method"] = SEARCH_METHODS[args.method]
+    payload["orderBy"] = SEARCH_ORDERS[args.order_by]
+    payload["groupBy"] = 1 if args.group_by_doc else 0
+    if args.types:
+        payload["types"] = {t: True for t in args.types}
+    paths = list(args.notebook or []) + list(args.paths or [])
+    if paths:
+        payload["paths"] = paths
+    response = client.post("/api/search/fullTextSearchBlock", payload)
+    if args.raw or args.method == "sql":
+        return response
+    data = response.get("data") or {}
+    blocks = [
+        {
+            "id": b.get("id"),
+            "rootID": b.get("rootID"),
+            "box": b.get("box"),
+            "hPath": b.get("hPath"),
+            "type": b.get("type"),
+            "subType": b.get("subType") or None,
+            "content": snippet(b.get("content")),
         }
-        if args.method:
-            payload["method"] = args.method
-        if args.types:
-            payload["types"] = args.types
-        if args.paths:
-            payload["paths"] = args.paths
-        return "/api/search/fullTextSearchBlock", payload
-    if command == "sql":
-        return "/api/query/sql", {"stmt": args.statement}
-    if command == "get-block":
-        return "/api/block/getBlockKramdown", {"id": args.id}
-    if command == "children":
-        return "/api/block/getChildBlocks", {"id": args.id}
-    if command == "list-docs":
-        return "/api/filetree/listDocsByPath", {"notebook": default_notebook(profile, args.notebook), "path": args.path}
-    if command == "create-doc":
-        markdown = read_text_arg(args.markdown, args.markdown_file, "markdown")
-        return "/api/filetree/createDocWithMd", {"notebook": default_notebook(profile, args.notebook), "path": args.path, "markdown": markdown}
-    if command == "rename-doc":
-        if args.id:
-            return "/api/filetree/renameDocByID", {"id": args.id, "title": args.title}
-        return "/api/filetree/renameDoc", {"notebook": default_notebook(profile, args.notebook), "path": required_value(args.path, "--path"), "title": args.title}
-    if command == "remove-doc":
-        if not args.id and not args.path:
-            fail({"error": "remove-doc requires --id or --path", "examples": [
-                "siyuan-cli remove-doc --id <doc-id>",
-                "siyuan-cli remove-doc --notebook <nb-id> --path /path/to/doc.sy",
-            ]})
-        if args.id:
-            return "/api/filetree/removeDocByID", {"id": args.id}
-        return "/api/filetree/removeDoc", {"notebook": default_notebook(profile, args.notebook), "path": required_value(args.path, "--path")}
-    if command == "hpath-by-id":
-        return "/api/filetree/getHPathByID", {"id": args.id}
-    if command == "path-by-id":
-        return "/api/filetree/getPathByID", {"id": args.id}
-    if command == "ids-by-hpath":
-        return "/api/filetree/getIDsByHPath", {"path": args.path, "notebook": default_notebook(profile, args.notebook)}
-    if command == "export-md":
-        return "/api/export/exportMdContent", {"id": args.id}
-    if command == "insert-block":
-        data = read_text_arg(args.markdown, args.markdown_file, "markdown")
-        payload = {
-            "dataType": "markdown",
-            "data": data,
-            "nextID": args.next_id or "",
-            "previousID": args.previous_id or "",
-            "parentID": args.parent_id or "",
+        for b in data.get("blocks") or []
+    ]
+    return with_data(
+        response,
+        {
+            "matchedBlockCount": data.get("matchedBlockCount"),
+            "matchedRootCount": data.get("matchedRootCount"),
+            "pageCount": data.get("pageCount"),
+            "blocks": blocks,
+        },
+    )
+
+
+def cmd_sql(args, client):
+    response = client.post("/api/query/sql", {"stmt": args.statement})
+    if isinstance(response, dict) and response.get("truncated"):
+        eprint(
+            f"[warn] Result truncated at the server default limit ({response.get('limit')} rows = Settings > Search > result count). "
+            "Add an explicit LIMIT/OFFSET with a stable ORDER BY (e.g. ORDER BY hpath, id); use SELECT COUNT(*) for totals."
+        )
+    return response
+
+
+def cmd_search_docs(args, client):
+    response = client.post("/api/filetree/searchDocs", {"k": args.keyword})
+    docs = [
+        {"id": Path(d.get("path", "")).stem or None, "box": d.get("box"), "hPath": d.get("hPath"), "path": d.get("path")}
+        for d in response.get("data") or []
+    ]
+    return with_data(response, docs)
+
+
+def cmd_backlinks(args, client):
+    if args.blocks:
+        stmt = (
+            "SELECT b.id, b.root_id, b.box, b.hpath, b.type, b.content, r.def_block_id "
+            "FROM refs r JOIN blocks b ON b.id = r.block_id "
+            f"WHERE r.def_block_id = '{args.id}' OR r.def_block_root_id = '{args.id}' "
+            "ORDER BY b.hpath, b.id LIMIT 9999"
+        )
+        return cmd_sql(argparse.Namespace(statement=stmt), client)
+    response = client.post("/api/ref/getBacklink2", {"id": args.id, "k": args.keyword or "", "mk": args.keyword or ""})
+    data = response.get("data") or {}
+
+    def compact(items):
+        return [
+            {"id": x.get("id"), "box": x.get("box"), "hPath": x.get("hPath"), "nodeType": x.get("nodeType"), "count": x.get("count")}
+            for x in items or []
+        ]
+
+    result = {"backlinkCount": data.get("linkRefsCount"), "backlinks": compact(data.get("backlinks"))}
+    if args.mentions:
+        result.update({"mentionCount": data.get("mentionsCount"), "mentions": compact(data.get("backmentions"))})
+    return with_data(response, result)
+
+
+def cmd_recent(args, client):
+    response = client.post("/api/block/getRecentUpdatedBlocks", {})
+    blocks = [
+        {
+            "id": b.get("id"),
+            "rootID": b.get("rootID"),
+            "hPath": b.get("hPath"),
+            "type": b.get("type"),
+            "updated": (b.get("ial") or {}).get("updated"),
+            "content": snippet(b.get("content"), 120),
         }
-        if not (payload["nextID"] or payload["previousID"] or payload["parentID"]):
-            fail({"error": "missing insertion anchor", "hint": "Pass --next-id, --previous-id, or --parent-id."})
-        return "/api/block/insertBlock", payload
-    if command == "append-block":
-        data = read_text_arg(args.markdown, args.markdown_file, "markdown")
-        return "/api/block/appendBlock", {"parentID": args.parent_id, "dataType": "markdown", "data": data}
-    if command == "prepend-block":
-        data = read_text_arg(args.markdown, args.markdown_file, "markdown")
-        return "/api/block/prependBlock", {"parentID": args.parent_id, "dataType": "markdown", "data": data}
-    if command == "update-block":
-        data = read_text_arg(args.markdown, args.markdown_file, "markdown")
-        return "/api/block/updateBlock", {"id": args.id, "dataType": "markdown", "data": data}
-    if command == "delete-block":
-        return "/api/block/deleteBlock", {"id": args.id}
-    if command == "fold-block":
-        return "/api/block/foldBlock", {"id": args.id}
-    if command == "unfold-block":
-        return "/api/block/unfoldBlock", {"id": args.id}
-    if command == "attrs":
-        return "/api/attr/getBlockAttrs", {"id": args.id}
-    if command == "set-attrs":
-        return "/api/attr/setBlockAttrs", {"id": args.id, "attrs": parse_json_arg(args.attrs, args.attrs_file)}
-    if command == "doc-outline":
-        return "/api/outline/getDocOutline", {"id": args.id}
-    fail({"error": "unknown command", "command": command})
+        for b in (response.get("data") or [])[: args.limit]
+    ]
+    return with_data(response, blocks)
+
+
+def cmd_tags(args, client):
+    if args.keyword:
+        return client.post("/api/search/searchTag", {"k": args.keyword})
+    return client.post("/api/tag/getTag", {"ignoreMaxListHint": True})
+
+
+def cmd_create_doc(args, client):
+    payload = {
+        "notebook": notebook_id(client.profile, args.notebook),
+        "path": resolve_doc_path(client.profile, args.path),
+        "markdown": markdown_of(args),
+    }
+    return client.post("/api/filetree/createDocWithMd", payload)
+
+
+def cmd_rename_doc(args, client):
+    if args.id:
+        return client.post("/api/filetree/renameDocByID", {"id": args.id, "title": args.title})
+    if not args.path:
+        fail({"error": "rename-doc requires --id or --path"})
+    return client.post("/api/filetree/renameDoc", {"notebook": notebook_id(client.profile, args.notebook), "path": args.path, "title": args.title})
+
+
+def cmd_remove_doc(args, client):
+    if args.id:
+        return client.post("/api/filetree/removeDocByID", {"id": args.id})
+    if not args.path:
+        fail({"error": "remove-doc requires --id or --path", "examples": [
+            "siyuan-cli remove-doc --id <doc-id>",
+            "siyuan-cli remove-doc --notebook <nb-id> --path /path/to/doc.sy",
+        ]})
+    return client.post("/api/filetree/removeDoc", {"notebook": notebook_id(client.profile, args.notebook), "path": args.path})
+
+
+def cmd_daily_note(args, client):
+    notebook = notebook_id(client.profile, args.notebook)
+    if args.markdown is None and args.markdown_file is None:
+        if args.prepend:
+            fail({"error": "--prepend needs --markdown or --markdown-file"})
+        return client.post("/api/filetree/createDailyNote", {"notebook": notebook})
+    endpoint = "/api/block/prependDailyNoteBlock" if args.prepend else "/api/block/appendDailyNoteBlock"
+    return client.post(endpoint, {"notebook": notebook, "dataType": "markdown", "data": markdown_of(args)})
+
+
+def cmd_insert_block(args, client):
+    payload = {
+        "dataType": "markdown",
+        "data": markdown_of(args),
+        "nextID": args.next_id or "",
+        "previousID": args.previous_id or "",
+        "parentID": args.parent_id or "",
+    }
+    if not (payload["nextID"] or payload["previousID"] or payload["parentID"]):
+        fail({"error": "missing insertion anchor", "hint": "Pass --next-id, --previous-id, or --parent-id."})
+    return client.post("/api/block/insertBlock", payload)
+
+
+def cmd_update_block(args, client):
+    payload = {"id": args.id, "dataType": "markdown", "data": markdown_of(args)}
+    if args.lock_type:
+        payload["lockType"] = True
+    return client.post("/api/block/updateBlock", payload)
+
+
+def cmd_move_block(args, client):
+    if not (args.previous_id or args.parent_id):
+        fail({"error": "missing move anchor", "hint": "Pass --previous-id (move after it) or --parent-id (move to first child)."})
+    payload: dict[str, Any] = {"id": args.id}
+    if args.previous_id:
+        payload["previousID"] = args.previous_id
+    if args.parent_id:
+        payload["parentID"] = args.parent_id
+    return client.post("/api/block/moveBlock", payload)
+
+
+def cmd_upload_asset(args, client):
+    return client.upload_assets(args.files, args.assets_dir)
+
+
+# --- parser -----------------------------------------------------------------
+
+
+def add_markdown_args(parser: argparse.ArgumentParser, required: bool = True) -> None:
+    group = parser.add_mutually_exclusive_group(required=required)
+    group.add_argument("--markdown", help="Markdown content.")
+    group.add_argument("--markdown-file", help="Read Markdown content from a UTF-8 file (preferred for long content).")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Operate SiYuan notes through the local HTTP API.")
+    parser = argparse.ArgumentParser(prog="siyuan-cli", description="Operate SiYuan notes through the local HTTP API.")
     parser.add_argument(
         "-V", "--version", action="version", version=f"siyuan-cli {__version__}",
         help="Show the siyuan-cli version and exit (for the connected server's version, use the `version` command).",
     )
     parser.add_argument("--profile", help="Profile name from config.json.")
     parser.add_argument("--config", help="Explicit config.json path.")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", required=True, metavar="<command>")
 
-    init = sub.add_parser("init-config", help="Create the user config file.")
-    init.add_argument("--overwrite", action="store_true")
+    def cmd(name: str, handler: Handler | None, help: str, needs_config: bool = True) -> argparse.ArgumentParser:
+        p = sub.add_parser(name, help=help, description=help)
+        p.set_defaults(handler=handler, needs_config=needs_config)
+        return p
 
-    sub.add_parser("version", help="Get the connected SiYuan server's version (for the CLI version use -V/--version).")
-    sub.add_parser("server-version", help="Alias of `version`: the connected SiYuan server's version.")
-    sub.add_parser("current-time", help="Get SiYuan system time.")
-    sub.add_parser("notebooks", help="List notebooks.")
+    # maintenance
+    p = cmd("init-config", None, "Create the user config file.", needs_config=False)
+    p.add_argument("--overwrite", action="store_true")
+    p = cmd("update-docs", None, "Refresh vendored official SiYuan API references.", needs_config=False)
+    p.add_argument("--references-dir", help="Path to the skill references directory. Defaults to ./skill/references.")
+    p.add_argument("--timeout", type=int, default=30)
 
-    update_docs = sub.add_parser("update-docs", help="Overwrite bundled references with the latest official SiYuan docs.")
-    update_docs.add_argument("--references-dir", help="Path to the skill references directory. Defaults to ./skill/references.")
-    update_docs.add_argument("--timeout", type=int, default=30)
+    # system
+    cmd("version", simple("/api/system/version"), "Get the connected SiYuan server's version (for the CLI version use -V/--version).")
+    cmd("server-version", simple("/api/system/version"), "Alias of `version`: the connected SiYuan server's version.")
+    cmd("current-time", simple("/api/system/currentTime"), "Get SiYuan system time.")
 
-    api = sub.add_parser("api", help="Call any SiYuan API endpoint.")
-    api.add_argument("endpoint", help="Endpoint such as /api/notebook/lsNotebooks.")
-    api.add_argument("--data", help="JSON object payload.")
-    api.add_argument("--data-file", help="Read JSON object payload from file.")
+    p = cmd("api", cmd_api, "Call any SiYuan API endpoint (only when no dedicated command exists).")
+    p.add_argument("endpoint", help="Endpoint such as /api/notebook/lsNotebooks.")
+    p.add_argument("--data", help="JSON object payload.")
+    p.add_argument("--data-file", help="Read JSON object payload from file.")
 
-    search = sub.add_parser("search", help="Full-text search blocks.")
-    search.add_argument("query")
-    search.add_argument("--page", type=int, default=1)
-    search.add_argument("--page-size", type=int, default=20)
-    search.add_argument("--method", help="Optional SiYuan search method.")
-    search.add_argument("--types", nargs="+", help="Optional block type filters.")
-    search.add_argument("--paths", nargs="+", help="Optional path filters.")
+    # notebooks
+    cmd("notebooks", simple("/api/notebook/lsNotebooks"), "List notebooks.")
+    p = cmd("create-notebook", simple("/api/notebook/createNotebook", lambda a, _: {"name": a.name}), "Create a notebook.")
+    p.add_argument("name")
+    p = cmd("rename-notebook", simple("/api/notebook/renameNotebook", lambda a, _: {"notebook": a.notebook, "name": a.name}), "Rename a notebook.")
+    p.add_argument("notebook")
+    p.add_argument("name")
+    for name, endpoint in (
+        ("open-notebook", "/api/notebook/openNotebook"),
+        ("close-notebook", "/api/notebook/closeNotebook"),
+        ("remove-notebook", "/api/notebook/removeNotebook"),
+        ("notebook-conf", "/api/notebook/getNotebookConf"),
+    ):
+        p = cmd(name, simple(endpoint, lambda a, _: {"notebook": a.notebook}), f"{name.replace('-', ' ').capitalize()}.")
+        p.add_argument("notebook", help="Notebook ID.")
 
-    sql = sub.add_parser("sql", help="Execute a SiYuan SQL query.")
-    sql.add_argument("statement")
+    # read / search
+    p = cmd("search", cmd_search, "Full-text search blocks (compact output; --raw for the full API response).")
+    p.add_argument("query")
+    p.add_argument("--page", type=int, default=1)
+    p.add_argument("--page-size", type=int, default=20)
+    p.add_argument("--method", choices=list(SEARCH_METHODS), default="keyword", help="keyword (default), query (query syntax), sql, regex.")
+    p.add_argument("--types", nargs="+", choices=SEARCH_TYPES, metavar="TYPE", help=f"Only these block types: {', '.join(SEARCH_TYPES)}.")
+    p.add_argument("--notebook", nargs="+", help="Limit to notebook IDs.")
+    p.add_argument("--paths", nargs="+", help="Limit to storage paths like <notebook-id>/<doc-id>.sy.")
+    p.add_argument("--order-by", choices=list(SEARCH_ORDERS), default="type")
+    p.add_argument("--group-by-doc", action="store_true", help="Group matches by document.")
+    p.add_argument("--raw", action="store_true", help="Print the full API response.")
 
-    create_notebook = sub.add_parser("create-notebook", help="Create a notebook.")
-    create_notebook.add_argument("name")
+    p = cmd("sql", cmd_sql, "Execute a read-only SQL query (warns on stderr when the server truncated the result).")
+    p.add_argument("statement")
 
-    rename_notebook = sub.add_parser("rename-notebook", help="Rename a notebook.")
-    rename_notebook.add_argument("notebook")
-    rename_notebook.add_argument("name")
+    p = cmd("search-docs", cmd_search_docs, "Find documents by title/path keyword.")
+    p.add_argument("keyword")
 
-    for name in ("open-notebook", "close-notebook"):
-        notebook = sub.add_parser(name, help=f"{name.replace('-', ' ').title()}.")
-        notebook.add_argument("notebook")
+    p = cmd("get-block", simple("/api/block/getBlockKramdown", lambda a, _: {"id": a.id}), "Read a block as Kramdown.")
+    p.add_argument("id")
+    p = cmd("get-blocks", simple("/api/block/getBlockKramdowns", lambda a, _: {"ids": a.ids}), "Read several blocks as Kramdown in one call.")
+    p.add_argument("ids", nargs="+")
+    p = cmd("children", simple("/api/block/getChildBlocks", lambda a, _: {"id": a.id}), "List child blocks.")
+    p.add_argument("id")
+    p = cmd("block-info", simple("/api/block/getBlockInfo", lambda a, _: {"id": a.id}), "Get a block's document, notebook, and path.")
+    p.add_argument("id")
+    p = cmd("doc-info", simple("/api/block/getDocInfo", lambda a, _: {"id": a.id}), "Get document info (title, attrs, ref and subdoc counts).")
+    p.add_argument("id")
+    p = cmd("breadcrumb", simple("/api/block/getBlockBreadcrumb", lambda a, _: {"id": a.id}), "Get the heading/list ancestry of a block.")
+    p.add_argument("id")
+    p = cmd("doc-outline", simple("/api/outline/getDocOutline", lambda a, _: {"id": a.id}), "Get document outline (heading tree).")
+    p.add_argument("id", help="Document ID.")
+    p = cmd("export-md", simple("/api/export/exportMdContent", lambda a, _: {"id": a.id}), "Export a document as Markdown content.")
+    p.add_argument("id")
+    p = cmd("recent", cmd_recent, "List recently updated blocks.")
+    p.add_argument("--limit", type=int, default=20)
+    p = cmd("backlinks", cmd_backlinks, "List documents referencing a block/document.")
+    p.add_argument("id", type=block_id)
+    p.add_argument("--keyword", help="Filter backlinks by keyword.")
+    p.add_argument("--mentions", action="store_true", help="Also list unlinked mentions.")
+    p.add_argument("--blocks", action="store_true", help="List the referencing blocks with content (via SQL) instead of documents.")
+    p = cmd("tags", cmd_tags, "List the tag tree, or search tags by keyword.")
+    p.add_argument("keyword", nargs="?")
+    cmd("bookmarks", simple("/api/bookmark/getBookmark"), "List bookmarks.")
+    p = cmd("attrs", simple("/api/attr/getBlockAttrs", lambda a, _: {"id": a.id}), "Get block attributes.")
+    p.add_argument("id")
 
-    get_block = sub.add_parser("get-block", help="Read a block as Kramdown.")
-    get_block.add_argument("id")
+    # paths and IDs
+    p = cmd("list-docs", simple("/api/filetree/listDocsByPath", lambda a, prof: {"notebook": notebook_id(prof, a.notebook), "path": a.path}), "List documents under a notebook storage path.")
+    p.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
+    p.add_argument("--path", default="/", help="Storage path such as / or /<doc-id>.sy.")
+    p = cmd("hpath-by-id", simple("/api/filetree/getHPathByID", lambda a, _: {"id": a.id}), "Get human-readable document path by block/doc ID.")
+    p.add_argument("id")
+    p = cmd("path-by-id", simple("/api/filetree/getPathByID", lambda a, _: {"id": a.id}), "Get storage path by block/doc ID.")
+    p.add_argument("id")
+    p = cmd("ids-by-hpath", simple("/api/filetree/getIDsByHPath", lambda a, prof: {"path": a.path, "notebook": notebook_id(prof, a.notebook)}), "Get document IDs by human-readable path.")
+    p.add_argument("path")
+    p.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
 
-    children = sub.add_parser("children", help="List child blocks.")
-    children.add_argument("id")
+    # documents
+    p = cmd("create-doc", cmd_create_doc, "Create a document with Markdown. Missing parent documents are created.")
+    p.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
+    p.add_argument("--path", required=True, help="hPath like /Inbox/Title ('/' always separates levels). A bare title goes under default_doc_path.")
+    add_markdown_args(p)
+    p = cmd("rename-doc", cmd_rename_doc, "Rename a document by ID or notebook/path.")
+    p.add_argument("--id")
+    p.add_argument("--notebook", help="Required with --path unless default_notebook is configured.")
+    p.add_argument("--path", help="Storage path such as /<doc-id>.sy.")
+    p.add_argument("--title", required=True)
+    p = cmd("remove-doc", cmd_remove_doc, "Remove a document (and its subdocuments) by ID or notebook/path.")
+    p.add_argument("--id")
+    p.add_argument("--notebook", help="Required with --path unless default_notebook is configured.")
+    p.add_argument("--path", help="Storage path such as /<doc-id>.sy.")
+    p = cmd("move-doc", simple("/api/filetree/moveDocsByID", lambda a, _: {"fromIDs": a.ids, "toID": a.to}), "Move documents under another document or to a notebook root.")
+    p.add_argument("ids", nargs="+", help="Document IDs to move.")
+    p.add_argument("--to", required=True, help="Target parent document ID or notebook ID.")
+    p = cmd("daily-note", cmd_daily_note, "Create/get today's daily note, or append/prepend Markdown to it.")
+    p.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
+    p.add_argument("--prepend", action="store_true", help="Prepend instead of append.")
+    add_markdown_args(p, required=False)
 
-    list_docs = sub.add_parser("list-docs", help="List documents under a notebook path.")
-    list_docs.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
-    list_docs.add_argument("--path", default="/")
+    # blocks
+    p = cmd("insert-block", cmd_insert_block, "Insert Markdown before, after, or inside an anchor block.")
+    p.add_argument("--next-id", help="Insert before this block.")
+    p.add_argument("--previous-id", help="Insert after this block.")
+    p.add_argument("--parent-id", help="Insert as a child of this block.")
+    add_markdown_args(p)
+    for name, endpoint in (("append-block", "/api/block/appendBlock"), ("prepend-block", "/api/block/prependBlock")):
+        p = cmd(name, simple(endpoint, lambda a, _: {"parentID": a.parent_id, "dataType": "markdown", "data": markdown_of(a)}),
+                f"{'Append' if name.startswith('append') else 'Prepend'} Markdown as the {'last' if name.startswith('append') else 'first'} child of a block or document.")
+        p.add_argument("parent_id")
+        add_markdown_args(p)
+    p = cmd("update-block", cmd_update_block, "Replace ONE block with Markdown.")
+    p.add_argument("id")
+    p.add_argument("--lock-type", action="store_true", help="Reject the update if the new content changes the block type.")
+    add_markdown_args(p)
+    p = cmd("move-block", cmd_move_block, "Move a block after a sibling (--previous-id) or into a parent (--parent-id).")
+    p.add_argument("id")
+    p.add_argument("--previous-id")
+    p.add_argument("--parent-id")
+    p = cmd("delete-block", simple("/api/block/deleteBlock", lambda a, _: {"id": a.id}), "Delete a block.")
+    p.add_argument("id")
+    p = cmd("fold-block", simple("/api/block/foldBlock", lambda a, _: {"id": a.id}), "Fold a block.")
+    p.add_argument("id")
+    p = cmd("unfold-block", simple("/api/block/unfoldBlock", lambda a, _: {"id": a.id}), "Unfold a block.")
+    p.add_argument("id")
+    p = cmd("set-attrs", simple("/api/attr/setBlockAttrs", lambda a, _: {"id": a.id, "attrs": parse_json_arg(a.attrs, a.attrs_file, "attrs")}),
+            "Set block attributes (custom ones need the custom- prefix; a null value removes the attribute).")
+    p.add_argument("id")
+    p.add_argument("--attrs", help="JSON object of attributes.")
+    p.add_argument("--attrs-file", help="Read attributes JSON object from file.")
 
-    create_doc = sub.add_parser("create-doc", help="Create a document with Markdown.")
-    create_doc.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
-    create_doc.add_argument("--path", required=True, help="Document path, for example /Inbox/New note.")
-    create_doc.add_argument("--markdown")
-    create_doc.add_argument("--markdown-file")
-
-    rename_doc = sub.add_parser("rename-doc", help="Rename a document by ID or notebook/path.")
-    rename_doc.add_argument("--id")
-    rename_doc.add_argument("--notebook", help="Required with --path unless default_notebook is configured.")
-    rename_doc.add_argument("--path")
-    rename_doc.add_argument("--title", required=True)
-
-    remove_doc = sub.add_parser("remove-doc", help="Remove a document by ID or notebook/path.")
-    remove_doc.add_argument("--id")
-    remove_doc.add_argument("--notebook", help="Required with --path unless default_notebook is configured.")
-    remove_doc.add_argument("--path")
-
-    hpath = sub.add_parser("hpath-by-id", help="Get human-readable document path by block/doc ID.")
-    hpath.add_argument("id")
-
-    path = sub.add_parser("path-by-id", help="Get storage path by block/doc ID.")
-    path.add_argument("id")
-
-    ids_by_hpath = sub.add_parser("ids-by-hpath", help="Get document IDs by human-readable path.")
-    ids_by_hpath.add_argument("path")
-    ids_by_hpath.add_argument("--notebook", help="Notebook ID. Defaults to profile.default_notebook.")
-
-    export_md = sub.add_parser("export-md", help="Export a document as Markdown content.")
-    export_md.add_argument("id")
-
-    insert = sub.add_parser("insert-block", help="Insert Markdown before, after, or inside an anchor block.")
-    insert.add_argument("--next-id")
-    insert.add_argument("--previous-id")
-    insert.add_argument("--parent-id")
-    insert.add_argument("--markdown")
-    insert.add_argument("--markdown-file")
-
-    for name in ("append-block", "prepend-block"):
-        block = sub.add_parser(name, help=f"{name.replace('-', ' ').title()} with Markdown.")
-        block.add_argument("parent_id")
-        block.add_argument("--markdown")
-        block.add_argument("--markdown-file")
-
-    update = sub.add_parser("update-block", help="Replace a block with Markdown.")
-    update.add_argument("id")
-    update.add_argument("--markdown")
-    update.add_argument("--markdown-file")
-
-    delete = sub.add_parser("delete-block", help="Delete a block.")
-    delete.add_argument("id")
-
-    fold = sub.add_parser("fold-block", help="Fold a block.")
-    fold.add_argument("id")
-
-    unfold = sub.add_parser("unfold-block", help="Unfold a block.")
-    unfold.add_argument("id")
-
-    attrs = sub.add_parser("attrs", help="Get block attributes.")
-    attrs.add_argument("id")
-
-    set_attrs = sub.add_parser("set-attrs", help="Set custom block attributes.")
-    set_attrs.add_argument("id")
-    set_attrs.add_argument("--attrs", help="JSON object of attributes.")
-    set_attrs.add_argument("--attrs-file", help="Read attributes JSON object from file.")
-
-    upload_asset = sub.add_parser("upload-asset", help="Upload files to SiYuan assets.")
-    upload_asset.add_argument("files", nargs="+", help="File paths to upload.")
-    upload_asset.add_argument("--assets-dir", default="/assets/", help="Target assets directory path (default: /assets/).")
-
-    doc_outline = sub.add_parser("doc-outline", help="Get document outline (heading tree).")
-    doc_outline.add_argument("id", help="Document ID.")
+    # assets
+    p = cmd("upload-asset", cmd_upload_asset, "Upload files to SiYuan assets.")
+    p.add_argument("files", nargs="+", help="File paths to upload.")
+    p.add_argument("--assets-dir", default="/assets/", help="Target assets directory path (default: /assets/).")
 
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
+    args = build_parser().parse_args(argv)
 
-    if args.command == "init-config":
-        eprint("[profile: default]")
-        json_out(init_config(args.overwrite))
-        return 0
-    if args.command == "update-docs":
+    if not args.needs_config:
         eprint("[profile: none]")
-        json_out(update_docs_payload(args))
+        if args.command == "init-config":
+            json_out(init_config(args.overwrite))
+        else:
+            json_out(update_docs(args.references_dir, args.timeout))
         return 0
 
-    _config_path, profile_name, profile = load_config(args)
+    _config_path, profile_name, profile = load_config(args.config, args.profile)
     eprint(f"[profile: {profile_name}]")
-
-    if args.command == "upload-asset":
-        result = api_upload_asset(profile, args.files, args.assets_dir)
-        json_out(result)
-        return 0
-
-    endpoint, payload = command_payload(args, profile)
-
-    if args.command == "api" and endpoint in ENDPOINT_TO_COMMAND:
-        eprint(f"[hint] This endpoint has a dedicated command: siyuan-cli {ENDPOINT_TO_COMMAND[endpoint]}")
-
-    result = api_post(profile, endpoint, payload)
-    json_out(result)
+    json_out(args.handler(args, SiYuanClient(profile)))
     return 0
 
 

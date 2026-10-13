@@ -22,9 +22,9 @@ siyuan-cli init-config
 open ~/.config/agent-skills/siyuan-cli/config.json
 ```
 
-Set `profiles.default.token` from SiYuan `Settings > About`. Set `base_url` to the current SiYuan API URL if it is not `http://127.0.0.1:6806`.
+Set `profiles.default.token` from SiYuan `设置 - 鉴权 - API token` (Settings > Auth > API token). Set `base_url` to the current SiYuan API URL if it is not `http://127.0.0.1:6806`. Optionally set `default_notebook` and `default_doc_path`.
 
-The CLI prints `[profile: <name>]` to stderr on every run and JSON to stdout. Use `--profile <name>` for alternate SiYuan instances.
+The CLI prints `[profile: <name>]` to stderr on every run, JSON to stdout, and `[warn]`/`[hint]` lines to stderr. Use `--profile <name>` for alternate SiYuan instances.
 
 ## Official Docs
 
@@ -36,6 +36,8 @@ rg -n "/api/block/appendBlock" references/official/API.md
 rg -n "appendBlock" references/official/kernel-api-router.go
 ```
 
+Only endpoints with their own section in `API*.md` are public and stable; other routes in `kernel-api-router.go` are internal and may change. `DOCUMENT-HPATH.md` explains how document titles map to hPaths.
+
 If the official docs are missing or stale, update them from the SiYuan official GitHub repo:
 
 ```bash
@@ -46,50 +48,77 @@ When working from this repository root, `siyuan-cli update-docs` is enough.
 
 ## Quick Commands
 
-Always prefer dedicated commands over `siyuan-cli api`. Use `siyuan-cli api` only for endpoints that have no dedicated command.
+Always prefer dedicated commands over `siyuan-cli api`. Use `siyuan-cli api` only for endpoints that have no dedicated command (it prints a `[hint]` when one exists).
 
-**Read / Search:**
+**Find:**
 
 ```bash
 siyuan-cli notebooks
-siyuan-cli list-docs --notebook <notebook-id> --path /
-siyuan-cli search "关键词" --page-size 10
-siyuan-cli sql "SELECT id, content, hpath FROM blocks WHERE content LIKE '%关键词%' LIMIT 20"
-siyuan-cli get-block <block-id>
-siyuan-cli export-md <doc-id>
+siyuan-cli search "关键词" --page-size 10                      # compact results; --raw for the full response
+siyuan-cli search "关键词" --types heading paragraph --notebook <notebook-id> --order-by updated-desc
+siyuan-cli search "a b" --method query                         # also: regex, sql
+siyuan-cli search-docs "标题关键词"                              # documents by title/path
+siyuan-cli sql "SELECT id, content, hpath FROM blocks WHERE content LIKE '%关键词%' ORDER BY hpath, id LIMIT 50"
+siyuan-cli recent --limit 20                                   # recently updated blocks
+siyuan-cli backlinks <block-or-doc-id> [--mentions] [--blocks]
+siyuan-cli tags [keyword]
+siyuan-cli bookmarks
+```
+
+> **SQL row limit**: without an explicit outer `LIMIT`, `/api/query/sql` returns at most `search.limit` rows (Settings > Search result count, ~64 by default) and silently drops the rest — this once made a 100+ subdoc tree look like 63. The CLI prints `[warn] Result truncated` on stderr when it happens. Always paginate with `LIMIT/OFFSET` plus a stable `ORDER BY hpath, id`; use `SELECT COUNT(*)` for totals.
+
+**Read:**
+
+```bash
+siyuan-cli export-md <doc-id>                 # whole document as Markdown
+siyuan-cli get-block <block-id>               # one block as Kramdown (with IALs/IDs)
+siyuan-cli get-blocks <id1> <id2> ...         # several blocks in one call
 siyuan-cli children <block-id>
 siyuan-cli doc-outline <doc-id>
+siyuan-cli doc-info <doc-id>                  # title, attrs, ref count, subdoc count
+siyuan-cli block-info <block-id>              # owning document and notebook
+siyuan-cli breadcrumb <block-id>              # heading/list ancestry
 siyuan-cli attrs <block-id>
 siyuan-cli hpath-by-id <block-or-doc-id>
 siyuan-cli ids-by-hpath /path/to/doc --notebook <notebook-id>
+siyuan-cli list-docs --notebook <notebook-id> --path /
 ```
-
-> **`sql` 默认约 64 行上限**：`sql`（`/api/query/sql`）不显式写 `LIMIT` 时只返回约 64 行并静默截断——曾据此误判"某文档树只有 63 个子文档"，实际上百个。枚举/取全量务必加 `LIMIT 9999`；核总数用 `SELECT COUNT(*)`（不受行限影响）；`COUNT` 与枚举条数对不上，几乎一定是行限截断而非数据缺失。
 
 **Create:**
 
 ```bash
 siyuan-cli create-notebook "Name"
 siyuan-cli create-doc --notebook <notebook-id> --path /Inbox/Title --markdown-file note.md
-siyuan-cli insert-block --previous-id <block-id> --markdown "Inserted after"
+siyuan-cli create-doc --path "Title" --markdown "..."     # bare title -> default_doc_path in default_notebook
+siyuan-cli daily-note --notebook <notebook-id>           # create/get today's note
+siyuan-cli daily-note --notebook <notebook-id> --markdown "- captured item"   # append (--prepend to put first)
 siyuan-cli append-block <parent-id> --markdown "New paragraph"
 siyuan-cli prepend-block <parent-id> --markdown-file prepend.md
+siyuan-cli insert-block --previous-id <block-id> --markdown "Inserted after"
 ```
 
-**Update:**
+`create-doc --path` is an hPath: `/` always separates levels and missing parents are created. A literal slash in a title must be the full-width `／`.
+
+**Update / Move:**
 
 ```bash
-siyuan-cli rename-notebook <notebook-id> "New Name"
+siyuan-cli update-block <block-id> --markdown-file replacement.md [--lock-type]   # replaces ONE block
+siyuan-cli move-block <block-id> --previous-id <sibling-id>    # or --parent-id <parent-id> to become first child
+siyuan-cli move-doc <doc-id>... --to <parent-doc-id-or-notebook-id>
 siyuan-cli rename-doc --id <doc-id> --title "New title"
-siyuan-cli update-block <block-id> --markdown-file replacement.md
+siyuan-cli rename-notebook <notebook-id> "New Name"
 siyuan-cli set-attrs <block-id> --attrs '{"custom-key":"value"}'
+siyuan-cli fold-block <block-id> / unfold-block <block-id>
 ```
+
+`update-block` replaces exactly one block; to edit and also add content, update the block then `insert-block --previous-id` it. `--lock-type` rejects edits that would change the block type (e.g. paragraph → heading).
 
 **Delete:**
 
 ```bash
-siyuan-cli remove-doc --id <doc-id>
 siyuan-cli delete-block <block-id>
+siyuan-cli remove-doc --id <doc-id>            # also removes subdocuments
+siyuan-cli remove-notebook <notebook-id>       # whole notebook; confirm with the user first
 ```
 
 **Assets:**
@@ -98,17 +127,18 @@ siyuan-cli delete-block <block-id>
 siyuan-cli upload-asset /path/to/image.png --assets-dir /assets/
 ```
 
-Use `siyuan-cli api <endpoint> --data '{...}'` for official endpoints not yet wrapped by a dedicated command. Check the local official docs first so the request payload matches the current API.
+Block references in Markdown use `((block-id "anchor text"))`, never `[[block-id]]`.
 
 ## Workflow
 
-1. Prefer dedicated commands for all write operations. Quick Commands above lists everything available; `siyuan-cli api` is only for endpoints without a dedicated command.
-2. For lookup, start with `search` or `sql`, then read the selected block with `get-block`.
-2. For whole-document reading, prefer `export-md <doc-id>`; for block-level reading, use `get-block` and `children`.
-3. For writes, resolve the destination notebook/document/block first. If a default notebook is configured, it may be used for document commands; otherwise pass `--notebook`.
-4. For long Markdown content, write a temporary file in the current workspace and pass `--markdown-file`.
-5. Before replacing or deleting content, read the target block or export the target document and make sure it is unique.
-6. In the final answer, describe the note title/path or action result in human terms; include IDs only when useful for later edits.
+1. Prefer dedicated commands for all operations; `siyuan-cli api` is only for endpoints without one.
+2. For lookup, start with `search`, `search-docs`, or `sql`, then read the selected block with `get-block` (or several with `get-blocks`).
+3. For whole-document reading, prefer `export-md <doc-id>`; for block-level reading, use `get-block`, `children`, and `doc-outline`.
+4. For writes, resolve the destination notebook/document/block first. If a default notebook is configured, it may be used for document commands; otherwise pass `--notebook`.
+5. For long Markdown content, write a temporary file in the current workspace and pass `--markdown-file`.
+6. Before replacing, moving, or deleting content, read the target block or export the target document and make sure it is unique.
+7. A `code: 0` response means the request was accepted; it does not guarantee indexes are refreshed. If a follow-up search misses fresh content, read by ID instead.
+8. In the final answer, describe the note title/path or action result in human terms; include IDs only when useful for later edits.
 
 ## Note Organization
 

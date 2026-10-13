@@ -1,7 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["active", "profiles"],
+  "required": [
+    "active",
+    "profiles"
+  ],
   "properties": {
     "active": {
       "type": "string",
@@ -11,7 +14,10 @@
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": ["base_url", "token"],
+        "required": [
+          "base_url",
+          "token"
+        ],
         "properties": {
           "base_url": {
             "type": "string",
@@ -20,7 +26,7 @@
           },
           "token": {
             "type": "string",
-            "description": "SiYuan API token from Settings > About. Keep empty in committed templates."
+            "description": "SiYuan API token from Settings > Auth > API token (设置 - 鉴权 - API token). Keep empty in committed templates."
           },
           "timeout_seconds": {
             "type": "integer",
@@ -29,11 +35,12 @@
           },
           "default_notebook": {
             "type": "string",
-            "description": "Notebook ID used by create-doc when --notebook is omitted."
+            "description": "Notebook ID used by document and daily-note commands when --notebook is omitted."
           },
           "default_doc_path": {
             "type": "string",
-            "default": "/Inbox"
+            "default": "/Inbox",
+            "description": "Parent hPath for create-doc when --path is a bare title (no leading /)."
           }
         },
         "additionalProperties": true
@@ -42,4 +49,3 @@
   },
   "additionalProperties": false
 }
-
