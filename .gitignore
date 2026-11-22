@@ -10,6 +10,5 @@ dist/
 build/
 *.egg-info/
 .eggs/
-.config.json
-skill/.config.json
-.handoff/local/
+/AGENTS.md
+/.handoff/

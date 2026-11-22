@@ -196,7 +196,7 @@ def find_installed_skill_info() -> dict[str, str | None] | None:
         home / ".agents" / "skills" / "siyuan-cli" / "SKILL.md",
         home / ".claude" / "skills" / "siyuan-cli" / "SKILL.md",
         home / ".gemini" / "config" / "skills" / "siyuan-cli" / "SKILL.md",
-        Path(__file__).resolve().parent.parent / "skill" / "SKILL.md",
+        Path(__file__).resolve().parent.parent / "skills" / "siyuan-cli" / "SKILL.md",
     ]
     for path in candidates:
         if path.is_file():
@@ -737,7 +737,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = cmd("init-config", None, "Create ~/.config/agent-skills/siyuan-cli/config.json.", needs_config=False)
     p.add_argument("--overwrite", action="store_true")
     p = cmd("update-docs", None, "Refresh vendored official SiYuan API references.", needs_config=False)
-    p.add_argument("--references-dir", help="Path to the skill references directory. Defaults to ./skill/references.")
+    p.add_argument("--references-dir", help="Path to the skill references directory. Defaults to ./skills/siyuan-cli/references.")
     p.add_argument("--timeout", type=int, default=30)
     cmd("check-update", None, "Check GitHub release & notice feed without requiring SiYuan.", needs_config=False)
     cmd("doctor", None, "Diagnose CLI/Skill versions, config, server connectivity, and /mcp availability.", needs_config=False)

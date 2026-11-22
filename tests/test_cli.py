@@ -214,10 +214,10 @@ class PayloadTests(unittest.TestCase):
 class ConfigAndMcpTransportTests(unittest.TestCase):
     def test_cwd_dot_config_is_never_implicitly_loaded(self):
         with tempfile.TemporaryDirectory() as home_dir, tempfile.TemporaryDirectory() as cwd_dir:
-            # Plant a broken/hostile .config.json in CWD and CWD/skill
+            # Plant a broken/hostile .config.json in CWD and in a skill directory under CWD
             (Path(cwd_dir) / ".config.json").write_text("{broken", encoding="utf-8")
-            (Path(cwd_dir) / "skill").mkdir()
-            (Path(cwd_dir) / "skill" / ".config.json").write_text('{"profiles":{"default":{"base_url":"http://evil.example","token":"x"}}}', encoding="utf-8")
+            (Path(cwd_dir) / "skills" / "siyuan-cli").mkdir(parents=True)
+            (Path(cwd_dir) / "skills" / "siyuan-cli" / ".config.json").write_text('{"profiles":{"default":{"base_url":"http://evil.example","token":"x"}}}', encoding="utf-8")
 
             prev_cwd = os.getcwd()
             os.chdir(cwd_dir)

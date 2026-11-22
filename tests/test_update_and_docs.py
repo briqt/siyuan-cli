@@ -113,18 +113,18 @@ class UpdateCheckTests(unittest.TestCase):
 
 class RepoConsistencyTests(unittest.TestCase):
     def test_version_skill_config_and_notice_stay_in_sync(self):
-        skill_md = (REPO_ROOT / "skill" / "SKILL.md").read_text(encoding="utf-8")
+        skill_md = (REPO_ROOT / "skills" / "siyuan-cli" / "SKILL.md").read_text(encoding="utf-8")
         m = re.search(r'^\s*version:\s*"?([0-9]+\.[0-9]+\.[0-9]+)"?\s*$', skill_md, re.MULTILINE)
-        self.assertIsNotNone(m, "skill/SKILL.md must declare metadata.version")
+        self.assertIsNotNone(m, "skills/siyuan-cli/SKILL.md must declare metadata.version")
         self.assertEqual(m.group(1), __version__)
 
         # Ensure knowledge-project external coupling is absent
         self.assertNotIn("knowledge-project", skill_md)
 
-        # Config template matches skill/config.json and schema properties
-        skill_cfg = json.loads((REPO_ROOT / "skill" / "config.json").read_text(encoding="utf-8"))
+        # Config template matches skills/siyuan-cli/config.json and schema properties
+        skill_cfg = json.loads((REPO_ROOT / "skills" / "siyuan-cli" / "config.json").read_text(encoding="utf-8"))
         self.assertEqual(skill_cfg, CONFIG_TEMPLATE)
-        schema = json.loads((REPO_ROOT / "skill" / "config.schema.json").read_text(encoding="utf-8"))
+        schema = json.loads((REPO_ROOT / "skills" / "siyuan-cli" / "config.schema.json").read_text(encoding="utf-8"))
         self.assertEqual(set(schema["properties"].keys()), set(CONFIG_TEMPLATE.keys()))
 
         # notice.json is valid and never ahead of local __version__

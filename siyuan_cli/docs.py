@@ -23,7 +23,7 @@ OFFICIAL_DOCS = [
 def detect_references_dir(explicit: str | None = None) -> Path:
     if explicit:
         return Path(explicit).expanduser()
-    candidates = [Path.cwd() / "skill" / "references", Path.cwd() / "references"]
+    candidates = [Path.cwd() / "skills" / "siyuan-cli" / "references", Path.cwd() / "references"]
     for candidate in candidates:
         if candidate.is_dir():
             return candidate
@@ -31,7 +31,7 @@ def detect_references_dir(explicit: str | None = None) -> Path:
         {
             "error": "references directory not found",
             "searched": [str(p) for p in candidates],
-            "repair": "Run from the repository root or pass --references-dir /path/to/skill/references.",
+            "repair": "Run from the repository root or pass --references-dir /path/to/skills/siyuan-cli/references.",
         }
     )
 

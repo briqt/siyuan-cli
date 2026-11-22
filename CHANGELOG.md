@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.1 — 2026-11-22
+
+- Move the companion skill to `skills/siyuan-cli/`. Installed skills follow automatically on the next `npx skills add briqt/siyuan-cli -g -y` or `npx skills update`; `doctor` and `update-docs` look in the new location.
+- Skill description states the capability boundary instead of listing individual operations.
+- Add the MIT `LICENSE` file; drop leftover `.gitignore` entries for in-repo config files, which the CLI has not read since v0.4.0.
+
 ## v0.4.0 — 2026-11-22
 
 - **Dual-channel official SiYuan engine (`/api/*` + `/mcp`)**:

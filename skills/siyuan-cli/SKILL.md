@@ -1,8 +1,8 @@
 ---
 name: siyuan-cli
-description: Operate SiYuan Note / 思源笔记 through the local `siyuan-cli` CLI backed by the official HTTP API and built-in MCP tools. Use when the user wants to search (keyword, regex, SQL, semantic, or attachment content), read, export, import, create, duplicate, append, update, move, rename, or delete SiYuan notebooks, documents, blocks, databases (Attribute Views), tags, bookmarks, templates, history, snapshots, inbox items, or assets, or trigger sync. Also use when they mention 思源笔记, SiYuan, block IDs (like 20240101120000-abc1234), notebook IDs, or a SiYuan API endpoint on port 6806.
+description: Operate SiYuan Note / 思源笔记 through the local `siyuan-cli` CLI backed by the official HTTP API and built-in MCP tools. Use for any task that reads, searches, writes, organizes or syncs content in SiYuan — notebooks, documents, blocks, databases (Attribute Views), assets and their metadata — and whenever SiYuan block or notebook IDs (like 20240101120000-abc1234) or its API on port 6806 come up.
 metadata:
-  version: "0.4.0"
+  version: "0.4.1"
 ---
 
 # SiYuan CLI

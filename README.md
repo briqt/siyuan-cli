@@ -4,7 +4,7 @@ Local-first CLI and companion AI agent skill for [SiYuan Note](https://github.co
 
 `siyuan-cli` combines SiYuan's official HTTP API (`/api/*`) and built-in MCP service (`/mcp`, SiYuan ≥ 3.7.0, tested on `3.8.11+`) behind one fast, stateless CLI—giving agents full official SiYuan capabilities without paying the ~20,000-token per-turn schema cost of mounting raw MCP tools.
 
-Official SiYuan API and addressing references are vendored under `skill/references/official/` so agents can search contracts locally offline.
+Official SiYuan API and addressing references are vendored under `skills/siyuan-cli/references/official/` so agents can search contracts locally offline.
 
 ## Install & Upgrade
 
@@ -65,7 +65,7 @@ siyuan-cli version         # connected SiYuan server version
 
 ## Development
 
-Refresh vendored official SiYuan docs (pinned to a single upstream commit in `skill/references/official/manifest.json`):
+Refresh vendored official SiYuan docs (pinned to a single upstream commit in `skills/siyuan-cli/references/official/manifest.json`):
 
 ```bash
 python3 -m siyuan_cli.cli update-docs
