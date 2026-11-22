@@ -1,5 +1,6 @@
 {
   "active": "default",
+  "disable_update_check": false,
   "profiles": {
     "default": {
       "base_url": "http://127.0.0.1:6806",
@@ -10,4 +11,3 @@
     }
   }
 }
-

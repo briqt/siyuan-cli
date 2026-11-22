@@ -16,6 +16,7 @@ OFFICIAL_DOCS = [
     {"name": "api-en", "filename": "API.md", "repo_path": "docs/API.md"},
     {"name": "api-router", "filename": "kernel-api-router.go", "repo_path": "kernel/api/router.go"},
     {"name": "document-hpath", "filename": "DOCUMENT-HPATH.md", "repo_path": "docs/DOCUMENT-HPATH.md"},
+    {"name": "document-addressing-zh", "filename": "DOCUMENT-ADDRESSING_zh_CN.md", "repo_path": "docs/DOCUMENT-ADDRESSING.zh-CN.md"},
 ]
 
 
@@ -60,7 +61,7 @@ def update_docs(references_dir: str | None, timeout: float) -> dict[str, Any]:
     official_dir.mkdir(parents=True, exist_ok=True)
     files = []
     changed = []
-    for item, raw_url, text in fetched:
+    for item, _raw_url, text in fetched:
         target = official_dir / item["filename"]
         old = target.read_text(encoding="utf-8") if target.exists() else None
         if old != text:

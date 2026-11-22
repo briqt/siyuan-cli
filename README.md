@@ -1,42 +1,78 @@
 # siyuan-cli
 
-Local-first CLI and agent skill for SiYuan Note. Zero dependencies (Python ≥ 3.10 stdlib only).
+Local-first CLI and companion AI agent skill for [SiYuan Note](https://github.com/siyuan-note/siyuan). Zero third-party dependencies (Python ≥ 3.10 standard library only).
 
-Official references are vendored under `skill/references/official/` so agents can read and grep the docs locally before calling APIs.
+`siyuan-cli` combines SiYuan's official HTTP API (`/api/*`) and built-in MCP service (`/mcp`, SiYuan ≥ 3.7.0, tested on `3.8.11+`) behind one fast, stateless CLI—giving agents full official SiYuan capabilities without paying the ~20,000-token per-turn schema cost of mounting raw MCP tools.
 
-Install from GitHub:
+Official SiYuan API and addressing references are vendored under `skill/references/official/` so agents can search contracts locally offline.
+
+## Install & Upgrade
 
 ```bash
+# Install CLI
 pipx install git+https://github.com/briqt/siyuan-cli.git
-# upgrade: pipx install --force git+https://github.com/briqt/siyuan-cli.git
-siyuan-cli init-config
-open ~/.config/agent-skills/siyuan-cli/config.json
+
+# Upgrade CLI
+pipx install --force git+https://github.com/briqt/siyuan-cli.git
+
+# Install / sync companion agent skill
+npx skills add briqt/siyuan-cli -g -y
 ```
 
-Set the SiYuan API token from `设置 - 鉴权 - API token` (Settings > Auth > API token), then run:
+## Configure & Verify
 
 ```bash
+siyuan-cli init-config
+# Edit ~/.config/agent-skills/siyuan-cli/config.json and set profiles.default.token
+# from SiYuan: 设置 - 鉴权 - API token (Settings > Auth > API token)
+
+siyuan-cli doctor        # verify CLI/Skill versions, config, server version & /mcp tools
+siyuan-cli check-update  # check GitHub release & notice feed
+```
+
+## Common Commands
+
+```bash
+# Search & inspect
 siyuan-cli notebooks
 siyuan-cli search "keyword"
+siyuan-cli semantic-search "topic"
+siyuan-cli search-assets "clause" --ext .pdf
 siyuan-cli search-docs "title"
+siyuan-cli sql-schema
+siyuan-cli sql "SELECT id, content, hpath FROM blocks LIMIT 20"
 siyuan-cli export-md <doc-id>
+
+# Structured document creation (3.8.11+, preserves literal '/' in titles) & daily notes
+siyuan-cli create-doc --notebook <notebook-id> --title "C/C++ Notes" --markdown "# Hello"
 siyuan-cli create-doc --notebook <notebook-id> --path /Inbox/hello --markdown "# Hello"
 siyuan-cli daily-note --notebook <notebook-id> --markdown "- captured"
-siyuan-cli --help          # all commands
-siyuan-cli -V              # siyuan-cli's own version
-siyuan-cli version         # the connected SiYuan server's version
+
+# Databases (Attribute Views), tags, bookmarks, export/import, templates, history & sync
+siyuan-cli db search --keyword "Tasks"
+siyuan-cli tags
+siyuan-cli export <doc-id> --format html
+siyuan-cli sync status
+
+# Full official ceiling & help
+siyuan-cli mcp-tools [tool]
+siyuan-cli mcp <tool> [action] --args '{...}'
+siyuan-cli api <endpoint> --data '{...}'
+siyuan-cli --help
+siyuan-cli -V              # CLI version
+siyuan-cli version         # connected SiYuan server version
 ```
 
-Update vendored official docs (pinned to the latest upstream commit, recorded in `manifest.json`):
+## Development
+
+Refresh vendored official SiYuan docs (pinned to a single upstream commit in `skill/references/official/manifest.json`):
 
 ```bash
-siyuan-cli update-docs
+python3 -m siyuan_cli.cli update-docs
 ```
 
 Run tests:
 
 ```bash
-python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests -v
 ```
-
-Install the agent skill from `skill/` with your preferred skills installer.

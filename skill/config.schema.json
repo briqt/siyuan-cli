@@ -10,6 +10,11 @@
       "type": "string",
       "description": "Default profile name used when --profile is omitted."
     },
+    "disable_update_check": {
+      "type": "boolean",
+      "default": false,
+      "description": "Set true to disable bounded GitHub update and notice checks."
+    },
     "profiles": {
       "type": "object",
       "additionalProperties": {

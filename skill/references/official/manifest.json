@@ -1,34 +1,41 @@
 {
   "official_repository": "https://github.com/siyuan-note/siyuan",
-  "commit": "fb3355f07d22bff36f1d785999fd5ded6a90d468",
+  "commit": "e6794a0c44976269591c2e1633c29dc44ca379e4",
   "files": [
     {
       "name": "api-zh",
       "path": "API_zh_CN.md",
-      "source_url": "https://github.com/siyuan-note/siyuan/blob/fb3355f07d22bff36f1d785999fd5ded6a90d468/docs/API.zh-CN.md",
-      "bytes": 82024,
-      "sha256": "590fa8d83c4e7f25b85e7df5d391c2689b1859d9e1dee068fb4fec17481b69fa"
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/e6794a0c44976269591c2e1633c29dc44ca379e4/docs/API.zh-CN.md",
+      "bytes": 115834,
+      "sha256": "e1de45a39aeca5530eb2a83eaab2e778c6d3fd5d06fd0ff33e2accfa81bdfd8c"
     },
     {
       "name": "api-en",
       "path": "API.md",
-      "source_url": "https://github.com/siyuan-note/siyuan/blob/fb3355f07d22bff36f1d785999fd5ded6a90d468/docs/API.md",
-      "bytes": 87284,
-      "sha256": "b404e3b15fb63dff33c680e7fd6552c1c31f440486a58ddd779e3786e7a97bf2"
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/e6794a0c44976269591c2e1633c29dc44ca379e4/docs/API.md",
+      "bytes": 124922,
+      "sha256": "ebf66a70b5513b0fbab5536b3f3c5d0a22220685d6f616245c6aa6c7ff3a15be"
     },
     {
       "name": "api-router",
       "path": "kernel-api-router.go",
-      "source_url": "https://github.com/siyuan-note/siyuan/blob/fb3355f07d22bff36f1d785999fd5ded6a90d468/kernel/api/router.go",
-      "bytes": 82535,
-      "sha256": "aab11332a1ad6e507c3178e959ce73eb946a51b296e686fc106a07c649f99dd5"
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/e6794a0c44976269591c2e1633c29dc44ca379e4/kernel/api/router.go",
+      "bytes": 105747,
+      "sha256": "6ad1b00528d0fb4a5fc6fc2e2fd39f0a0818fbc40a55737a57750a7220afa909"
     },
     {
       "name": "document-hpath",
       "path": "DOCUMENT-HPATH.md",
-      "source_url": "https://github.com/siyuan-note/siyuan/blob/fb3355f07d22bff36f1d785999fd5ded6a90d468/docs/DOCUMENT-HPATH.md",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/e6794a0c44976269591c2e1633c29dc44ca379e4/docs/DOCUMENT-HPATH.md",
       "bytes": 5146,
       "sha256": "d77888330fe499a9ad7f942ab52a34948a7ecd41046b8826716094306cbb2044"
+    },
+    {
+      "name": "document-addressing-zh",
+      "path": "DOCUMENT-ADDRESSING_zh_CN.md",
+      "source_url": "https://github.com/siyuan-note/siyuan/blob/e6794a0c44976269591c2e1633c29dc44ca379e4/docs/DOCUMENT-ADDRESSING.zh-CN.md",
+      "bytes": 71215,
+      "sha256": "1cf06b5435be749d693d90582ad2275a8e108bbbefa8100858e2dff6ac81c12a"
     }
   ]
 }

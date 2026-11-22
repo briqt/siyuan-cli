@@ -1,78 +1,87 @@
-# SiYuan API Workflows
+# SiYuan API & Built-in MCP Workflows
 
-Load this file when a task needs endpoint details, safe write sequencing, or an endpoint that has no dedicated command. SKILL.md Quick Commands lists every dedicated command; `siyuan-cli <command> --help` shows all flags.
+Load this file when a task needs dual-channel (`/api/*` vs `/mcp`) details, structured document addressing (`3.8.11+`), Attribute View (database) payload shapes, or endpoints without dedicated commands.
 
-## Official Sources
+## Dual-Channel Architecture (`/api/*` + `/mcp`)
 
-The official docs are vendored locally for clarity and repeatability:
+SiYuan exposes two official local HTTP interfaces on the same `base_url` and `Authorization: Token <token>`:
 
-- `references/official/API_zh_CN.md` - official Chinese API docs from `siyuan-note/siyuan`
-- `references/official/API.md` - official English API docs
-- `references/official/DOCUMENT-HPATH.md` - how document titles, renames, and hPaths relate
-- `references/official/kernel-api-router.go` - official API router source (every route, including internal ones)
-- `references/official/manifest.json` - upstream commit, source URLs, and checksums for the vendored files
+1. **`POST /api/*` (Kernel HTTP API)**: Direct JSON endpoints with strict TypeScript-contract validation (`code: 0` on success) and multipart asset upload (`/api/asset/upload`).
+2. **`POST /mcp` (Built-in Streamable HTTP MCP, SiYuan ≥ 3.7.0, tested on 3.8.11+)**: 31 official macro-tools (`document`, `block`, `search`, `database`, `export`, `import`, `tag`, `bookmark`, `template`, `history`, `repo`, `sync`, `inbox`, `pdf`, `image`, `bazaar`, etc.) that enforce workspace read-only mode, encrypted-notebook guards, and MCP exposure policies.
 
-Use `rg` on local docs before calling less common endpoints:
+`siyuan-cli` speaks both channels over Python stdlib `urllib.request`, opening and closing `/mcp` sessions per call (`DELETE /mcp`) and normalizing all outputs to `{"code": 0, "msg": "", "data": ...}` on `stdout`.
+
+## Official Vendored Docs
+
+Official docs from `https://github.com/siyuan-note/siyuan` are vendored under `references/official/`:
+
+- `references/official/API_zh_CN.md` & `API.md` — public `/api/*` contracts
+- `references/official/DOCUMENT-ADDRESSING_zh_CN.md` & `DOCUMENT-HPATH.md` — structured IDs, title segments, literal `/` rules, and hPath behavior
+- `references/official/kernel-api-router.go` — all registered HTTP & MCP routes
+- `references/official/manifest.json` — pinned upstream commit and SHA-256 checksums
+
+Search locally with `rg` or inspect live MCP schemas on demand:
 
 ```bash
-rg -n "/api/filetree/createDocWithMd|通过 Markdown 创建文档" references/official/API_zh_CN.md
-rg -n "/api/block/moveBlock|移动块" references/official/API_zh_CN.md
-rg -n "moveBlock|createDocWithMd" references/official/kernel-api-router.go
+rg -n "createDocByParent|resolveDocPath|getDocPaths" references/official/API_zh_CN.md
+siyuan-cli mcp-tools                 # list all live /mcp tools and action names
+siyuan-cli mcp-tools database        # inspect full inputSchema & docs of one /mcp tool
 ```
 
-Refresh the vendored official docs only when they are missing or stale:
+Refresh vendored official docs when upstream SiYuan adds new public contracts:
 
 ```bash
 siyuan-cli update-docs --references-dir <skill-root>/references
 ```
 
-The source of truth is the official GitHub repo `https://github.com/siyuan-note/siyuan`. Treat `docs.siyuan-note.club` as supplementary community developer documentation unless an official source links to the exact page.
+## Structured Document Addressing vs hPath (SiYuan 3.8.11+)
 
-## API Basics
+- **`create-doc --title <title> [--parent-id <doc-id>]` (`/api/filetree/createDocByParent`)**:
+  - Preserves literal `/` inside `title` (e.g. `"C/C++"` or `"TCP/IP"`).
+  - Omit `--parent-id` to create at the notebook root (`parentID: null`); pass an existing document ID to create a child document.
+  - Supports `--id <doc-id>` (auto-generated if omitted), `--tags`, `--with-math`, `--template-path`, and `--expected-parent-revision`.
+- **`resolve-doc-path <seg1> <seg2> ... --notebook <nb>` (`/api/filetree/resolveDocPath`)**:
+  - Resolves exact title segments step-by-step without splitting on `/`. Returns `status` (`resolved` | `missing` | `ambiguous`), `resolved` metadata, `candidates`, and `nameConditions`.
+- **`doc-paths <id>... --notebook <nb>` (`/api/filetree/getDocPaths`)**:
+  - Batch-reads structured document metadata and ancestor `segments` without fetching body content.
+- **`create-doc --path /A/B/C` (`/api/filetree/createDocWithMd`)**:
+  - Convenience hPath creation that splits on `/` and auto-creates missing intermediate parents. Fails with `pathAmbiguous` if an ancestor has a literal `/` or empty title—switch to `resolve-doc-path` + `create-doc --title --parent-id` in those notebooks.
 
-- Default base URL: `http://127.0.0.1:6806`
-- Endpoints use `POST` with a JSON body unless the docs say otherwise.
-- Auth header: `Authorization: Token <token>`; the token is in `设置 - 鉴权 - API token`.
-- Responses follow `{ "code": 0, "msg": "", "data": ... }`. Nonzero `code` means failure; do not treat partial data as success.
-- Requests are type-checked strictly: unknown fields and wrong JSON types (e.g. a string where a number is expected) are rejected with `Field [...] has an invalid type`.
-- Only endpoints with their own section in `API*.md` are public. Other routes are internal and may change without notice; prefer public ones when both work.
-- `code: 0` only covers what the endpoint documents; indexes, caches, and sync may lag. Do not infer read-only behavior from an endpoint name, and do not blindly retry writes after an ambiguous failure — read the current state first.
+## Attribute Views (Databases) via `siyuan-cli db`
 
-## CLI Shape
-
-The CLI prints machine-readable JSON to stdout and diagnostics to stderr. The first stderr line is always `[profile: <name>]` (`[profile: none]` for `init-config` and `update-docs`). `[warn]` lines flag results that need attention (e.g. truncated SQL); `[hint]` lines point from `api` calls to dedicated commands.
-
-`search`, `search-docs`, `backlinks`, and `recent` return compact `data` (IDs, hPath, type, plain-text snippet). Pass `search --raw` for the full API response.
-
-## Lookup Strategy
-
-- `search` for user-facing keyword lookup; `--types`, `--notebook`, `--order-by`, and `--method query|regex` narrow it.
-- `search-docs` when the user names a document rather than content.
-- `sql` for structured filtering: time ranges, attributes, paths, block metadata. Tables: `blocks`, `refs`, `attributes`, `spans`, `assets`. Always add `ORDER BY ... LIMIT/OFFSET`.
-- `backlinks --blocks` lists every referencing block with its content; plain `backlinks` lists referencing documents.
-
-## Safe Writes
-
-Before destructive writes:
-
-1. Resolve the target to a unique block or document ID.
-2. Read the existing block with `get-block` (or `export-md` for documents) when replacing, moving, or deleting.
-3. Mention the target title/path in the final answer, not just the raw ID.
-
-`remove-doc` removes subdocuments too; `remove-notebook` removes the whole notebook — confirm with the user before either.
-
-## Common Raw Endpoints
-
-Endpoints without a dedicated command; check the vendored docs for current payloads:
+Run `siyuan-cli mcp-tools database` whenever unsure of a field type or view payload. Common patterns:
 
 ```bash
-siyuan-cli api /api/filetree/getHPathByPath --data '{"notebook":"<id>","path":"/<doc-id>.sy"}'
-siyuan-cli api /api/block/transferBlockRef --data '{"fromID":"<id>","toID":"<id>"}'
-siyuan-cli api /api/template/renderSprig --data '{"template":"{{now | date \"2006-01-02\"}}"}'
-siyuan-cli api /api/notification/pushMsg --data '{"msg":"done","timeout":5000}'
-siyuan-cli api /api/av/getAttributeView --data '{"id":"<av-id>"}'
+# 1. Inspect database schema, columns (keys), and views
+siyuan-cli db search --keyword "Tasks"
+siyuan-cli db get --id <av-id>
+siyuan-cli db keys --id <av-id>
+
+# 2. Add a column and add/update rows
+siyuan-cli db key-add --id <av-id> --name "Priority" --type select
+siyuan-cli db item-add --id <av-id> --args '{"items":[{"fields":{"<pk-key-id>":{"block":{"content":"Ship v0.4.0"}}}}]}'
+siyuan-cli db item-update --id <av-id> --item-id <item-id> --key-id <key-id> --value '{"select":{"content":"High"}}'
+
+# 3. View filter/sort updates: always read `view-get` first to obtain `revision` and existing filters/sorts
+siyuan-cli db view-get --id <av-id> --view-id <view-id>
+siyuan-cli db view-sorts-set --id <av-id> --view-id <view-id> --revision <rev> --args '{"sorts":[{"column":"<key-id>","order":"DESC"}]}'
 ```
 
-## Markdown Notes
+## Safe Write & Timeout Recovery Rules
 
-Use Markdown for agent-generated note content unless the user asks for raw DOM or another representation. For long content, write a temporary file in the current workspace and pass `--markdown-file`. Block references use `((block-id "anchor text"))`.
+1. Writes are never retried automatically by `siyuan-cli`. If a write times out or returns `commitState: "unknown"`, read back the target document (`doc-paths` / `export-md` / `children`) before re-issuing the write so you do not create duplicates.
+2. Before `update-block`, `move-block`, `delete-block`, `remove-doc`, or `remove-notebook`, inspect the target first (`get-block` / `doc-info`) and report human-readable titles/paths in your response.
+3. Confirm with the user before `remove-doc`, `remove-notebook`, `remove-tag`, `clean-assets` (all), `history clear`, or `repo checkout` / `purge`.
+
+## Raw Passthrough Examples
+
+```bash
+# Built-in /mcp tools without dedicated wrappers (pdf, image, bazaar):
+siyuan-cli mcp image list --args '{"id":"<doc-id>"}'
+siyuan-cli mcp pdf list --args '{"documentID":"<doc-id>","path":"assets/paper.pdf"}'
+siyuan-cli mcp bazaar installed
+
+# Raw /api/* endpoints:
+siyuan-cli api /api/notification/pushMsg --data '{"msg":"Done","timeout":5000}'
+siyuan-cli api /api/filetree/getHPathByPath --data '{"notebook":"<nb-id>","path":"/<doc-id>.sy"}'
+```

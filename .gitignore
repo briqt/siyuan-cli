@@ -1,6 +1,7 @@
 .DS_Store
 __pycache__/
 *.py[cod]
+*$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -8,5 +9,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+.eggs/
 .config.json
 skill/.config.json
+.handoff/local/
