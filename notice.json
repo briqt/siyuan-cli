@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "latest_version": "0.4.0",
-  "release_url": "https://github.com/briqt/siyuan-cli/releases/tag/v0.4.0",
-  "notice_id": "v0.4.0-dual-channel",
-  "notice": "v0.4.0 新增思源内置 /mcp 双通道与 3.8.11 结构化文档寻址（支持多维数据库 db、语义/附件搜索、标签书签改删、导入导出、doctor 等）；请同时更新 CLI 与配套 Skill。"
+  "latest_version": "0.4.1",
+  "release_url": "https://github.com/briqt/siyuan-cli/releases/tag/v0.4.1",
+  "notice_id": "",
+  "notice": ""
 }
