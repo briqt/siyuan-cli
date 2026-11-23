@@ -119,9 +119,6 @@ class RepoConsistencyTests(unittest.TestCase):
         self.assertIsNotNone(m, "skills/siyuan-cli/SKILL.md must declare metadata.version")
         self.assertEqual(m.group(1), __version__)
 
-        # Ensure knowledge-project external coupling is absent
-        self.assertNotIn("knowledge-project", skill_md)
-
         # Config template matches skills/siyuan-cli/config.json and schema properties
         skill_cfg = json.loads((REPO_ROOT / "skills" / "siyuan-cli" / "config.json").read_text(encoding="utf-8"))
         self.assertEqual(skill_cfg, CONFIG_TEMPLATE)

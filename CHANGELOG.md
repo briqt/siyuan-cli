@@ -27,7 +27,7 @@
   - Add bounded optional update & notice checks (`notice.json`, `check-update`, `--no-update-check`, `disable_update_check`) and `doctor` diagnostics.
   - Convert missing `--markdown-file` / `--data-file` / `--attrs-file` errors into structured JSON on `stderr` instead of raw Python tracebacks; complete `ENDPOINT_TO_COMMAND` hints.
 - **Skill & repository hygiene**:
-  - Remove external `knowledge-project` coupling from `skill/SKILL.md`, add `metadata.version` sync tests, `.gitignore`, `AGENTS.md`, and `.handoff/` maintenance records.
+  - Add `metadata.version` sync tests and tidy `.gitignore`.
 
 ## v0.3.1 — 2026-10-13
 
