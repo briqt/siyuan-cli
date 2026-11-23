@@ -9,11 +9,12 @@ Official SiYuan API and addressing references are vendored under `skills/siyuan-
 ## Install & Upgrade
 
 ```bash
-# Install CLI
-pipx install git+https://github.com/briqt/siyuan-cli.git
+# Install CLI (uv; pipx works too: pipx install git+https://github.com/briqt/siyuan-cli.git)
+uv tool install git+https://github.com/briqt/siyuan-cli.git
 
-# Upgrade CLI
-pipx install --force git+https://github.com/briqt/siyuan-cli.git
+# Upgrade CLI (update notices print the command matching how it was installed)
+uv tool install --force --reinstall --refresh git+https://github.com/briqt/siyuan-cli.git
+# with pipx: pipx uninstall siyuan-cli; pipx install git+https://github.com/briqt/siyuan-cli.git
 
 # Install / sync companion agent skill
 npx skills add briqt/siyuan-cli -g -y

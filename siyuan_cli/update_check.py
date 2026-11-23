@@ -170,6 +170,21 @@ def save_state(file: Path, state: dict[str, Any]) -> None:
             pass
 
 
+REPO_SPEC = "git+https://github.com/briqt/siyuan-cli.git"
+
+
+def upgrade_command(prefix: str | None = None) -> str:
+    """Return the CLI upgrade command matching how this copy was installed (uv tool or pipx)."""
+    p = (prefix if prefix is not None else sys.prefix).replace("\\", "/").lower()
+    uv = f"uv tool install --force --reinstall --refresh {REPO_SPEC}"
+    pipx = f"pipx uninstall siyuan-cli; pipx install {REPO_SPEC}"
+    if "/uv/tools/" in p:
+        return uv
+    if "/pipx/" in p:
+        return pipx
+    return f"{uv}  (pipx: {pipx})"
+
+
 def evaluate_notifications(state: dict[str, Any], current: str, now_ms: int) -> list[dict[str, str]]:
     manifest = state.get("manifest")
     last_ok = state.get("last_success_at")
@@ -188,7 +203,7 @@ def evaluate_notifications(state: dict[str, Any], current: str, now_ms: int) -> 
                 "id": latest,
                 "text": (
                     f"[siyuan-cli update] {latest} available (current {current}): {manifest['release_url']}\n"
-                    "Upgrade CLI: pipx install --force git+https://github.com/briqt/siyuan-cli.git\n"
+                    f"Upgrade CLI: {upgrade_command()}\n"
                     "Sync companion skill: npx skills add briqt/siyuan-cli -g -y"
                 ),
             }

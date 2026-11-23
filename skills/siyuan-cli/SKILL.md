@@ -2,7 +2,7 @@
 name: siyuan-cli
 description: Operate SiYuan Note / 思源笔记 through the local `siyuan-cli` CLI backed by the official HTTP API and built-in MCP tools. Use for any task that reads, searches, writes, organizes or syncs content in SiYuan — notebooks, documents, blocks, databases (Attribute Views), assets and their metadata — and whenever SiYuan block or notebook IDs (like 20240101120000-abc1234) or its API on port 6806 come up.
 metadata:
-  version: "0.4.1"
+  version: "0.4.2"
 ---
 
 # SiYuan CLI
@@ -18,9 +18,10 @@ Every command prints JSON (`{"code": 0, "msg": "", "data": ...}` for SiYuan oper
 Install or upgrade the CLI and companion skill:
 
 ```bash
-pipx install git+https://github.com/briqt/siyuan-cli.git
-# upgrade an existing CLI install:
-pipx install --force git+https://github.com/briqt/siyuan-cli.git
+uv tool install git+https://github.com/briqt/siyuan-cli.git        # or: pipx install git+https://github.com/briqt/siyuan-cli.git
+# upgrade an existing CLI install (update notices print the command for the actual install channel):
+uv tool install --force --reinstall --refresh git+https://github.com/briqt/siyuan-cli.git
+# with pipx: pipx uninstall siyuan-cli; pipx install git+https://github.com/briqt/siyuan-cli.git
 # install or sync companion skill:
 npx skills add briqt/siyuan-cli -g -y
 ```

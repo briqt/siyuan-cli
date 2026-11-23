@@ -14,6 +14,7 @@ from siyuan_cli.update_check import (
     is_update_disabled,
     newer,
     stable_version,
+    upgrade_command,
     validate_manifest,
 )
 
@@ -75,7 +76,7 @@ class UpdateCheckTests(unittest.TestCase):
             self.assertEqual(r1["status"], "checked")
             self.assertTrue(r1["update_available"])
             self.assertEqual(len(emitted), 2)
-            self.assertIn("pipx install --force git+https://github.com/briqt/siyuan-cli.git", emitted[0])
+            self.assertIn(f"Upgrade CLI: {upgrade_command()}", emitted[0])
 
             # Within 1h throttle and 24h cooldown: zero network calls, zero new notices
             r2 = check_update(cache_dir, current="0.4.0", now_ms=t0 + 60_000, opener_fn=fake_opener, emit=emitted.append)
@@ -131,6 +132,20 @@ class RepoConsistencyTests(unittest.TestCase):
         notice_data = json.loads((REPO_ROOT / "notice.json").read_text(encoding="utf-8"))
         validated = validate_manifest(notice_data)
         self.assertFalse(newer(validated["latest_version"], __version__))
+
+
+
+class UpgradeCommandTests(unittest.TestCase):
+    def test_matches_install_channel(self):
+        uv = upgrade_command("/home/u/.local/share/uv/tools/siyuan-cli")
+        self.assertEqual(uv, "uv tool install --force --reinstall --refresh git+https://github.com/briqt/siyuan-cli.git")
+        self.assertEqual(upgrade_command(r"C:\Users\u\AppData\Roaming\uv\tools\siyuan-cli"), uv)
+        pipx = upgrade_command("/home/u/.local/share/pipx/venvs/siyuan-cli")
+        self.assertEqual(pipx, "pipx uninstall siyuan-cli; pipx install git+https://github.com/briqt/siyuan-cli.git")
+        self.assertNotIn("--force", pipx)
+        other = upgrade_command("/usr")
+        self.assertIn(uv, other)
+        self.assertIn(pipx, other)
 
 
 if __name__ == "__main__":

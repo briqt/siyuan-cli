@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.2 — 2026-11-23
+
+- Update notices print an upgrade command that matches how the CLI was installed: `uv tool install --force --reinstall --refresh …` for uv, `pipx uninstall siyuan-cli; pipx install …` for pipx. The previous `pipx install --force …` hint could exit successfully while leaving the old version in place under pipx's uv backend.
+- Install docs lead with `uv tool install`; pipx remains supported.
+
 ## v0.4.1 — 2026-11-22
 
 - Move the companion skill to `skills/siyuan-cli/`. Installed skills follow automatically on the next `npx skills add briqt/siyuan-cli -g -y` or `npx skills update`; `doctor` and `update-docs` look in the new location.
