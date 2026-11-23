@@ -1,14 +1,13 @@
-.DS_Store
+# 默认忽略所有 . 开头的文件和目录，需要跟踪的逐个放行
+.*
+!.gitignore
+
+# 个人 Agent 指令不入库
+/AGENTS.md
+
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.venv/
 dist/
 build/
 *.egg-info/
-.eggs/
-/AGENTS.md
-/.handoff/
