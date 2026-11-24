@@ -77,3 +77,11 @@ Run tests:
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+## Community
+
+[学 AI，上 Linux DO](https://linux.do/)
+
+## License
+
+[MIT](LICENSE)
